@@ -3,7 +3,7 @@
 
 # # Setup
 
-# In[ ]:
+# In[1]:
 
 
 # from google.colab import drive
@@ -44,9 +44,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# ### Get data
+# # Get data
 
-# In[ ]:
+# In[2]:
 
 
 # read text file with ticker names
@@ -56,7 +56,14 @@ ticker_names = raw_tickernames.split("\n")
 ticker_names = ticker_names[:len(ticker_names)-1]
 
 
-# In[ ]:
+# In[8]:
+
+
+import yfinance as yf
+import numpy as np
+
+
+# In[5]:
 
 
 # define date range
@@ -67,14 +74,14 @@ end_date_string = "2022-04-02"
 raw_data = yf.download(ticker_names, start=start_date_string, end=end_date_string)
 
 
-# In[ ]:
+# In[6]:
 
 
 # get daily close prices and drop missing columns
 df_close = raw_data['Adj Close'].dropna(axis='columns')
 
 
-# In[ ]:
+# In[9]:
 
 
 # convert pandas dataframe to numpy array, standardize ticker data, and transpose array
@@ -90,57 +97,21 @@ data = data.transpose()
 per_return = (df_close.to_numpy().transpose()[:,504] - df_close.to_numpy().transpose()[:,0])/df_close.to_numpy().transpose()[:,0]
 
 
-# ### Mapper
-
-# In[31]:
+# In[11]:
 
 
-# initialize mapper
-# mapper = km.KeplerMapper(verbose=1)
+data.shape
 
 
-# In[30]:
+# In[13]:
 
 
-# project data into 2D subsapce via 2 step transformation, 1)isomap 2)UMAP
-# projected_data = mapper.fit_transform(data, projection=[manifold.Isomap(n_components=100, n_jobs=-1), umap.UMAP(n_components=2,random_state=1)])
+df_close.columns.to_numpy()
 
 
-# In[29]:
-
-
-# cluster data using DBSCAN
-# G = mapper.map(projected_data, data, clusterer=sklearn.cluster.DBSCAN(metric="cosine"))
-
+# # Mapper
 
 # In[ ]:
-
-
-# define an excessively long filename (helpful if saving multiple Mapper variants for single dataset)
-fileID = 'projection=' + G['meta_data']['projection'].split('(')[0] + '_' + \
-'n_cubes=' + str(G['meta_data']['n_cubes']) + '_' + \
-'perc_overlap=' + str(G['meta_data']['perc_overlap']) + '_' + \
-'clusterer=' + G['meta_data']['clusterer'].split('(')[0] + '_' + \
-'scaler=' + G['meta_data']['scaler'].split('(')[0]
-
-
-# In[32]:
-
-
-# visualize graph
-# mapper.visualize(G,
-#                 path_html="mapper_example_" + fileID + ".html",
-#                 title=fileID,
-#                 custom_tooltips = df_close.columns.to_numpy(),
-#                 color_values = np.log(per_return+1),
-#                 color_function_name = 'Log Percent Returns',
-#                 node_color_function = np.array(['average', 'std', 'sum', 'max', 'min']))
-
-# display mapper in jupyter
-# km.jupyter.display("mapper_example_" + fileID + ".html")
-
-
-# In[22]:
 
 
 # initialize mapper
@@ -154,7 +125,30 @@ projected_data = mapper.fit_transform(data, projection=[manifold.Isomap(n_compon
 graph = mapper.map(projected_data, data, clusterer=sklearn.cluster.DBSCAN(metric="cosine"))
 
 
-# In[25]:
+# In[ ]:
+
+
+# define an excessively long filename (helpful if saving multiple Mapper variants for single dataset)
+fileID = 'projection=' + G['meta_data']['projection'].split('(')[0] + '_' + \
+'n_cubes=' + str(G['meta_data']['n_cubes']) + '_' + \
+'perc_overlap=' + str(G['meta_data']['perc_overlap']) + '_' + \
+'clusterer=' + G['meta_data']['clusterer'].split('(')[0] + '_' + \
+'scaler=' + G['meta_data']['scaler'].split('(')[0]
+
+
+# In[ ]:
+
+
+mapper.visualize(G,
+                path_html="mapper_example_" + fileID + ".html",
+                title=fileID,
+                custom_tooltips = df_close.columns.to_numpy(),
+                color_values = np.log(per_return+1),
+                color_function_name = 'Log Percent Returns',
+                node_color_function = np.array(['average', 'std', 'sum', 'max', 'min']))
+
+
+# In[ ]:
 
 
 # https://colab.research.google.com/github/shizuo-kaji/TutorialTopologicalDataAnalysis/blob/master/TopologicalDataAnalysisWithPython.ipynb#scrollTo=w41pQN-zHPcB
@@ -178,7 +172,7 @@ print("Download kepler-mapper-output.html and open it with a browser to see the 
 #kmapper.jupyter.display(path_html="kepler-mapper-output.html")
 
 
-# In[33]:
+# In[ ]:
 
 
 from google.colab import files

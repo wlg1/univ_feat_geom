@@ -87,7 +87,7 @@ def display_vis_inline(filename: str, height: int = 850):
 
 # # hf login
 
-# In[4]:
+# In[ ]:
 
 
 get_ipython().system('huggingface-cli login')
@@ -95,14 +95,14 @@ get_ipython().system('huggingface-cli login')
 
 # # load pretrained SAEs
 
-# In[ ]:
+# In[4]:
 
 
 from datasets import load_dataset
 from transformer_lens import HookedTransformer
 from sae_lens import SAE
 
-model = HookedTransformer.from_pretrained("gpt2-small", device = device)
+# model = HookedTransformer.from_pretrained("gpt2-small", device = device)
 
 # the cfg dict is returned alongside the SAE since it may contain useful information for analysing the SAE (eg: instantiating an activation store)
 # Note that this is not the same as the SAEs config dict, rather it is whatever was in the HF repo, from which we can extract the SAE config dict
@@ -139,6 +139,44 @@ sae_2, cfg_dict_2, sparsity_2 = SAE.from_pretrained(
     sae_id = "blocks.12.hook_resid_post", # won't always be a hook point
     device = device
 )
+
+
+# ## save decoder weights
+
+# In[5]:
+
+
+from google.colab import drive
+import shutil
+
+drive.mount('/content/drive')
+
+
+# In[6]:
+
+
+weight_matrix_np = sae.W_dec.cpu()
+
+
+# In[8]:
+
+
+import pickle
+
+
+# In[9]:
+
+
+Wdec_filename = 'gpt2-small-8-res-jb_Wdec.pkl'
+with open(Wdec_filename, 'wb') as f:
+    pickle.dump(weight_matrix_np, f)
+
+# source_path = f'/path/to/your/file/{file_name}'
+source_path = Wdec_filename
+# dest_folder = ''
+destination_path = f'/content/drive/MyDrive/{Wdec_filename}'
+
+shutil.copy(source_path, destination_path) # Copy the file
 
 
 # # load dataset
@@ -311,7 +349,7 @@ get_ipython().system('cp feature_acts_model_B.pkl /content/drive/MyDrive/')
 
 # ## setup
 
-# In[9]:
+# In[ ]:
 
 
 from datasets import load_dataset
@@ -319,7 +357,7 @@ from transformer_lens import HookedTransformer
 from sae_lens import SAE
 
 
-# In[22]:
+# In[ ]:
 
 
 from torch import nn, Tensor
@@ -327,13 +365,13 @@ from jaxtyping import Float, Int
 from typing import Optional, Callable, Union, List, Tuple
 
 
-# In[29]:
+# In[ ]:
 
 
 import pickle
 
 
-# In[33]:
+# In[ ]:
 
 
 from google.colab import drive
@@ -342,13 +380,13 @@ drive.mount('/content/drive')
 
 # ## laod model
 
-# In[10]:
+# In[ ]:
 
 
 model_2_layer = 'blocks.6.hook_resid_post'
 
 
-# In[11]:
+# In[ ]:
 
 
 model_2 = HookedTransformer.from_pretrained("gemma-2b", device = device)
@@ -361,7 +399,7 @@ sae_2, cfg_dict_2, sparsity_2 = SAE.from_pretrained(
 
 # ## get data
 
-# In[17]:
+# In[ ]:
 
 
 from transformer_lens.utils import tokenize_and_concatenate
@@ -381,7 +419,7 @@ token_dataset = tokenize_and_concatenate(
 )
 
 
-# In[18]:
+# In[ ]:
 
 
 batch_tokens = token_dataset[:32]["tokens"]
@@ -390,20 +428,20 @@ batch_tokens.shape
 
 # ## get LLM actvs
 
-# In[23]:
+# In[ ]:
 
 
 layer_name = model_2_layer
 
 
-# In[24]:
+# In[ ]:
 
 
 h_store_2 = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model_2.cfg.d_model), device=model_2.cfg.device)
 h_store_2.shape
 
 
-# In[25]:
+# In[ ]:
 
 
 def store_h_hook_2(
@@ -413,7 +451,7 @@ def store_h_hook_2(
     h_store_2[:] = pattern  # this works b/c changes values, not replaces entire thing
 
 
-# In[26]:
+# In[ ]:
 
 
 model_2.run_with_hooks(
@@ -427,7 +465,7 @@ model_2.run_with_hooks(
 
 # ## get SAE actvs
 
-# In[27]:
+# In[ ]:
 
 
 sae_2.eval()  # prevents error if we're expecting a dead neuron mask for who grads
@@ -437,20 +475,20 @@ with torch.no_grad():
 
 # Now you have to save actvs, bc saelens not compatible with umap lib
 
-# In[30]:
+# In[ ]:
 
 
 with open('feature_acts_model_B_L6.pkl', 'wb') as f:
     pickle.dump(feature_acts_2, f)
 
 
-# In[34]:
+# In[ ]:
 
 
 get_ipython().system('cp feature_acts_model_B_L6.pkl /content/drive/MyDrive/')
 
 
-# In[35]:
+# In[ ]:
 
 
 file_path = '/content/drive/MyDrive/feature_acts_model_B_L6.pkl'
