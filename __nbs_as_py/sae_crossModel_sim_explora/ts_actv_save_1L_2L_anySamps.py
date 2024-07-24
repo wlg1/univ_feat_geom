@@ -55,13 +55,13 @@ from typing import Optional, Callable, Union, List, Tuple
 
 # # load model
 
-# In[5]:
+# In[ ]:
 
 
 from transformer_lens import HookedTransformer
 
 
-# In[6]:
+# In[ ]:
 
 
 model = HookedTransformer.from_pretrained("tiny-stories-1L-21M")
@@ -73,13 +73,13 @@ model = HookedTransformer.from_pretrained("tiny-stories-1L-21M")
 
 # To get feature actvs, use sae_lens class method. To do this, you must load the sae as the sae class (wrapper over torch model).
 
-# In[ ]:
+# In[5]:
 
 
 sae_layer = "blocks.0.hook_mlp_out"
 
 
-# In[ ]:
+# In[6]:
 
 
 total_training_steps = 30_000  # probably we should do more
@@ -144,7 +144,7 @@ cfg = LanguageModelSAERunnerConfig(
 )
 
 
-# In[ ]:
+# In[7]:
 
 
 # https://github.com/jbloomAus/SAELens/blob/main/sae_lens/sae.py#L13
@@ -157,7 +157,7 @@ sae_cfg = SAEConfig.from_dict(cfg_dict)
 # sae = cls(sae_cfg)
 
 
-# In[ ]:
+# In[8]:
 
 
 from sae_lens import SAE
@@ -165,7 +165,7 @@ sae = SAE(sae_cfg)
 # sae.cfg = sae_cfg
 
 
-# In[ ]:
+# In[9]:
 
 
 state_dict = torch.load('/content/drive/MyDrive/tiny-stories-1L-21M_sae_v1.pth')
@@ -174,13 +174,13 @@ sae.load_state_dict(state_dict)
 
 # ## save decoder weights
 
-# In[ ]:
+# In[10]:
 
 
 weight_matrix_np = sae.W_dec.cpu()
 
 
-# In[ ]:
+# In[11]:
 
 
 import pickle
@@ -188,14 +188,14 @@ with open('ts-1L-21M_Wdec.pkl', 'wb') as f:
     pickle.dump(weight_matrix_np, f)
 
 
-# In[ ]:
+# In[12]:
 
 
 # from google.colab import files
 # files.download('weight_matrix.pkl')
 
 
-# In[ ]:
+# In[13]:
 
 
 get_ipython().system('cp ts-1L-21M_Wdec.pkl /content/drive/MyDrive/')
@@ -205,7 +205,7 @@ get_ipython().system('cp ts-1L-21M_Wdec.pkl /content/drive/MyDrive/')
 
 # Need load model tokenizer and sae params before obtain dataset
 
-# In[7]:
+# In[ ]:
 
 
 from datasets import load_dataset
@@ -213,13 +213,13 @@ from datasets import load_dataset
 
 # ## any samples
 
-# In[8]:
+# In[ ]:
 
 
 # sae.cfg.context_size
 
 
-# In[9]:
+# In[ ]:
 
 
 from transformer_lens.utils import tokenize_and_concatenate
@@ -238,13 +238,13 @@ token_dataset = tokenize_and_concatenate(
 )
 
 
-# In[10]:
+# In[ ]:
 
 
 # sae.cfg.prepend_bos
 
 
-# In[11]:
+# In[ ]:
 
 
 batch_tokens = token_dataset[:500]["tokens"]
@@ -253,26 +253,26 @@ batch_tokens.shape
 
 # ### save data
 
-# In[12]:
+# In[ ]:
 
 
 import pickle
 
 
-# In[13]:
+# In[ ]:
 
 
 with open('batch_tokens_anySamps_v1.pkl', 'wb') as f:
     pickle.dump(batch_tokens, f)
 
 
-# In[14]:
+# In[ ]:
 
 
 get_ipython().system('cp batch_tokens_anySamps_v1.pkl /content/drive/MyDrive/')
 
 
-# In[15]:
+# In[ ]:
 
 
 # check if saved

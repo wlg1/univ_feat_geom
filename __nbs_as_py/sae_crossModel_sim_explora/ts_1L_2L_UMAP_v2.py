@@ -3,20 +3,20 @@
 
 # # setup
 
-# In[3]:
+# In[ ]:
 
 
 from google.colab import drive
 drive.mount('/content/drive')
 
 
-# In[1]:
+# In[ ]:
 
 
 get_ipython().system('pip install umap-learn')
 
 
-# In[2]:
+# In[ ]:
 
 
 import pickle
@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 
 # # load weight mats
 
-# In[4]:
+# In[ ]:
 
 
 # Define the path to your pickle file in Google Drive
@@ -42,13 +42,13 @@ with open(file_path, 'rb') as f:
 print(weight_matrix_np.shape)
 
 
-# In[5]:
+# In[ ]:
 
 
 weight_matrix_np = weight_matrix_np.detach().numpy()
 
 
-# In[6]:
+# In[ ]:
 
 
 # Define the path to your pickle file in Google Drive
@@ -62,7 +62,7 @@ with open(file_path, 'rb') as f:
 print(weight_matrix_2.shape)
 
 
-# In[7]:
+# In[ ]:
 
 
 weight_matrix_2 = weight_matrix_2.detach().numpy()
@@ -108,7 +108,7 @@ reshaped_activations_B.shape
 
 # # load feature labels
 
-# In[16]:
+# In[ ]:
 
 
 import json
@@ -116,14 +116,14 @@ with open('feature_top_samps_lst.json', 'rb') as f:
     feat_snip_dict = json.load(f)
 
 
-# In[17]:
+# In[ ]:
 
 
 with open('feature_top_samps_lst_2L_MLP0.json', 'rb') as f:
     feat_snip_dict_2 = json.load(f)
 
 
-# In[18]:
+# In[ ]:
 
 
 import re
@@ -142,7 +142,7 @@ def extract_tagged_word(s):
         return None
 
 
-# In[19]:
+# In[ ]:
 
 
 fList_model_A = []
@@ -157,7 +157,7 @@ for feat_dict in feat_snip_dict:
     fList_model_A.append(out_str)
 
 
-# In[20]:
+# In[ ]:
 
 
 fList_model_B = []
@@ -171,7 +171,7 @@ for feat_dict in feat_snip_dict_2:
 
 # # umap
 
-# In[49]:
+# In[ ]:
 
 
 # import umap
@@ -189,7 +189,7 @@ for feat_dict in feat_snip_dict_2:
 # embedding2 = reducer.fit_transform(weight_matrix_2)
 
 
-# In[50]:
+# In[ ]:
 
 
 # with open('embedding1.pkl', 'wb') as f:
@@ -203,7 +203,7 @@ for feat_dict in feat_snip_dict_2:
 
 # ## load
 
-# In[51]:
+# In[ ]:
 
 
 import pickle
@@ -215,7 +215,7 @@ with open('embedding2.pkl', 'rb') as f:
 
 # # load corr
 
-# In[22]:
+# In[ ]:
 
 
 import pickle
@@ -227,7 +227,7 @@ with open('highest_correlations_values_v1.pkl', 'rb') as f:
 
 # # cca on two models
 
-# In[8]:
+# In[ ]:
 
 
 from sklearn.cross_decomposition import CCA
@@ -235,7 +235,7 @@ from sklearn.cross_decomposition import CCA
 
 # ## directly
 
-# In[10]:
+# In[ ]:
 
 
 n_comp=2 #choose number of canonical variates pairs
@@ -248,13 +248,13 @@ A_c, B_c = cca.transform(weight_matrix_np, weight_matrix_2)
 comp_corr = [np.corrcoef(A_c[:, i], B_c[:, i])[1][0] for i in range(n_comp)]
 
 
-# In[12]:
+# In[ ]:
 
 
 comp_corr
 
 
-# In[11]:
+# In[ ]:
 
 
 plt.bar(['CC1', 'CC2'], comp_corr, color='lightgrey', width = 0.8, edgecolor='k')
@@ -262,7 +262,7 @@ plt.bar(['CC1', 'CC2'], comp_corr, color='lightgrey', width = 0.8, edgecolor='k'
 
 # ## on umap embed
 
-# In[14]:
+# In[ ]:
 
 
 cca = CCA(n_components=2)
@@ -558,7 +558,7 @@ for feature_idx_B, feature_idx_A in enumerate(highest_correlations_indices[:10])
 
 # # search modB features with keyword, get modA f pair
 
-# In[23]:
+# In[ ]:
 
 
 def find_indices_with_keyword(fList, keyword):
@@ -596,14 +596,14 @@ print(modB_feats)
 
 # ISSUE WITH SEARCH: ‘king’ appears to be part of ‘talking’, etc
 
-# In[56]:
+# In[ ]:
 
 
 split_list = fList_model_B[0].split(',')
 [i.replace(' ', '').lower() for i in split_list]
 
 
-# In[24]:
+# In[ ]:
 
 
 def find_indices_with_keyword(fList, keyword):
@@ -626,7 +626,7 @@ def find_indices_with_keyword(fList, keyword):
     return index_list
 
 
-# In[22]:
+# In[ ]:
 
 
 keyword = "king"
@@ -636,14 +636,14 @@ print(modA_feats)
 print(modB_feats)
 
 
-# In[44]:
+# In[ ]:
 
 
 print(fList_model_A[11920])
 print(fList_model_B[5430])
 
 
-# In[41]:
+# In[ ]:
 
 
 keyword = "spot"
@@ -653,7 +653,7 @@ print(modA_feats)
 print(modB_feats)
 
 
-# In[45]:
+# In[ ]:
 
 
 print(fList_model_A[0])
@@ -724,7 +724,7 @@ fig.show()
 
 # ## search and plot fn
 
-# In[47]:
+# In[ ]:
 
 
 import umap
@@ -785,7 +785,7 @@ def keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B,
     fig.show()
 
 
-# In[24]:
+# In[ ]:
 
 
 keyword = "princess"
@@ -794,21 +794,21 @@ keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, hig
 
 # ## try other keywords
 
-# In[25]:
+# In[ ]:
 
 
 keyword = "let"
 keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1)
 
 
-# In[26]:
+# In[ ]:
 
 
 keyword = "saw"
 keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1)
 
 
-# In[52]:
+# In[ ]:
 
 
 keyword = "spot"
@@ -822,7 +822,7 @@ print(fList_model_A[0])
 print(fList_model_B[12])
 
 
-# In[28]:
+# In[ ]:
 
 
 keyword = "king"
@@ -833,7 +833,7 @@ keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, hig
 
 # ## directly
 
-# In[25]:
+# In[ ]:
 
 
 keyword = "upon"
@@ -843,7 +843,7 @@ X_subset = weight_matrix_np[modA_feats, :]
 Y_subset = weight_matrix_2[modB_feats, :]
 
 
-# In[26]:
+# In[ ]:
 
 
 n_comp=2 #choose number of canonical variates pairs
@@ -859,7 +859,7 @@ comp_corr
 
 # ### compare to random
 
-# In[32]:
+# In[ ]:
 
 
 rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=len(modA_feats)).tolist()
@@ -878,7 +878,7 @@ comp_corr = [np.corrcoef(A_c[:, i], B_c[:, i])[1][0] for i in range(n_comp)]
 comp_corr
 
 
-# In[33]:
+# In[ ]:
 
 
 rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=len(modA_feats)).tolist()
@@ -897,13 +897,13 @@ comp_corr = [np.corrcoef(A_c[:, i], B_c[:, i])[1][0] for i in range(n_comp)]
 comp_corr
 
 
-# In[34]:
+# In[ ]:
 
 
 len(rand_modA_feats)
 
 
-# In[39]:
+# In[ ]:
 
 
 rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=10000).tolist()
@@ -924,7 +924,7 @@ comp_corr
 
 # ## after umap
 
-# In[29]:
+# In[ ]:
 
 
 keyword = "upon"
@@ -934,7 +934,7 @@ print(modA_feats)
 print(modB_feats)
 
 
-# In[35]:
+# In[ ]:
 
 
 import numpy as np
@@ -968,7 +968,7 @@ correlations = [np.corrcoef(X_c[:, i], Y_c[:, i])[0, 1] for i in range(X_c.shape
 print("Canonical correlations:", correlations)
 
 
-# In[36]:
+# In[ ]:
 
 
 # Compute the average canonical correlation score
@@ -976,14 +976,14 @@ average_score = np.mean(correlations)
 print("Average canonical correlation score:", average_score)
 
 
-# In[37]:
+# In[ ]:
 
 
 print("Canonical Correlations:")
 print(cca.score(X_umap, Y_umap))
 
 
-# In[38]:
+# In[ ]:
 
 
 print("Canonical Correlations:")
@@ -992,7 +992,7 @@ print(cca.score(X_c, Y_c))
 
 # ## normalize?
 
-# In[39]:
+# In[ ]:
 
 
 import numpy as np
@@ -1043,7 +1043,7 @@ print("CCA score:", cca_score)
 
 # ## turn into fn
 
-# In[40]:
+# In[ ]:
 
 
 # def cca_subspace(keyword):
@@ -1075,42 +1075,42 @@ def cca_subspace(keyword):
     print("Canonical correlations:", correlations)
 
 
-# In[41]:
+# In[ ]:
 
 
 keyword = "let"
 cca_subspace(keyword)
 
 
-# In[42]:
+# In[ ]:
 
 
 keyword = "saw"
 cca_subspace(keyword)
 
 
-# In[43]:
+# In[ ]:
 
 
 keyword = "king"
 cca_subspace(keyword)
 
 
-# In[44]:
+# In[ ]:
 
 
 keyword = "dragon"
 cca_subspace(keyword)
 
 
-# In[46]:
+# In[ ]:
 
 
 keyword = "he"
 cca_subspace(keyword)
 
 
-# In[47]:
+# In[ ]:
 
 
 keyword = "she"
