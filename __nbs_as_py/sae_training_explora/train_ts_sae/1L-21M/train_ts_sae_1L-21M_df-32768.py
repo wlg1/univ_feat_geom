@@ -72,7 +72,7 @@ layer_name = "blocks.0.hook_mlp_out"
 hook_layer = 0
 d_in = 1024
 expa_fac = 32
-wandb_project = "sae_" + model_name+"_MLP" + str(hook_layer) + "_df-" + str(d_in * expa_fac)
+wandb_project = "sae_" + model_name + "_MLP" + str(hook_layer) + "_df-" + str(d_in * expa_fac)
 
 
 # In[ ]:

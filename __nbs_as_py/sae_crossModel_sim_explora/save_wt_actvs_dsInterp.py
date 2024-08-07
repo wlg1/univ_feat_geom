@@ -3,7 +3,7 @@
 
 # # Setup
 
-# In[1]:
+# In[38]:
 
 
 from google.colab import drive
@@ -18,7 +18,7 @@ drive.mount('/content/drive')
 get_ipython().run_cell_magic('capture', '', 'try:\n    #import google.colab # type: ignore\n    #from google.colab import output\n    %pip install sae-lens transformer-lens\nexcept:\n    from IPython import get_ipython # type: ignore\n    ipython = get_ipython(); assert ipython is not None\n    ipython.run_line_magic("load_ext", "autoreload")\n    ipython.run_line_magic("autoreload", "2")\n')
 
 
-# In[28]:
+# In[3]:
 
 
 from transformer_lens import HookedTransformer
@@ -49,41 +49,35 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # # change input params here
 
-# In[5]:
+# In[75]:
 
 
-model_name = "tiny-stories-2L-33M"
+model_name = "tiny-stories-1L-21M"
+# model_name = "tiny-stories-2L-33M"
+short_model_name = 'ts_1L_21M'
+# short_model_name = 'ts_2L_33M'
 layer_name = "blocks.0.hook_mlp_out"
 hook_layer = 0
 d_in = 1024
-expa_fac = 32
-wandb_project = "sae_" + model_name+"_MLP" + str(hook_layer) + "_df-" + str(d_in * expa_fac)
+expa_fac = 8  # 8, 16, 32
+total_training_steps = 100000 # 30_000
+activation_fn_str = "topk"
+activation_fn_kwargs = {"k":32}
+
+# wandb_project = "sae_" + model_name+"_MLP" + str(hook_layer) + "_df-" + str(d_in * expa_fac)
+wandb_project = "sae_" + model_name + "_MLP" + str(hook_layer) + "_df" + str(d_in * expa_fac) + "_steps100k" + "_topK"
 drive_save_path = '/content/drive/MyDrive/'+wandb_project+'.pth'
 
 save_data_fn = 'batch_tokens_anySamps_v1.pkl'
-Wdec_filename = 'ts_2L_33M_Wdec' + "_df" + str(d_in * expa_fac) + '.pkl'
-acts_save_path = 'fActs_ts_2L_33M' + "_df_" + str(d_in * expa_fac) + '_anySamps_v1.pkl'
-
-
-# In[6]:
-
-
-# model_name = "tiny-stories-1L-21M"
-# layer_name = "blocks.0.hook_mlp_out"
-# hook_layer = 0
-# d_in = 1024
-# expa_fac = 32
-# wandb_project = "sae_" + model_name+"_MLP" + str(hook_layer) + "_df-" + str(d_in * expa_fac)
-# drive_save_path = '/content/drive/MyDrive/'+wandb_project+'.pth'
-
-# save_data_fn = 'batch_tokens_anySamps_v1.pkl'
-# Wdec_filename = 'ts_1L_21M_Wdec' + "_df" + str(d_in * expa_fac) + '.pkl'
-# acts_save_path = 'fActs_ts_1L_21M' + "_df_" + str(d_in * expa_fac) + '_anySamps_v1.pkl'
+# Wdec_filename = 'Wdec_' + short_model_name + "_df" + str(d_in * expa_fac) + '.pkl'
+# acts_save_path = 'fActs_' + short_model_name + "_df_" + str(d_in * expa_fac)  + '_anySamps_v1.pkl'
+Wdec_filename = 'Wdec_' + short_model_name + "_df" + str(d_in * expa_fac)  + "_steps100k" + "_topK" + '.pkl'
+acts_save_path = 'fActs_' + short_model_name + "_df_" + str(d_in * expa_fac)  + "_steps100k" + "_topK" + '_anySamps_v1.pkl'
 
 
 # # load model
 
-# In[7]:
+# In[57]:
 
 
 model = HookedTransformer.from_pretrained(model_name)
@@ -95,7 +89,7 @@ model = HookedTransformer.from_pretrained(model_name)
 
 # Need load model tokenizer before obtain dataset
 
-# In[8]:
+# In[ ]:
 
 
 from transformer_lens.utils import tokenize_and_concatenate
@@ -114,19 +108,19 @@ token_dataset = tokenize_and_concatenate(
 )
 
 
-# In[9]:
+# In[ ]:
 
 
 batch_tokens = token_dataset[:500]["tokens"]
 batch_tokens.shape
 
 
-# ## save data
+# ## save selected data
 
 # In[ ]:
 
 
-with open(, 'wb') as f:
+with open(save_data_fn, 'wb') as f:
     pickle.dump(batch_tokens, f)
 
 # source_path = f'/path/to/your/file/{file_name}'
@@ -137,7 +131,9 @@ destination_path = f'/content/drive/MyDrive/{save_data_fn}'
 shutil.copy(source_path, destination_path) # Copy the file
 
 
-# In[ ]:
+# ## load selected data
+
+# In[6]:
 
 
 # check if saved
@@ -152,10 +148,9 @@ with open(file_path, 'rb') as f:
 
 # To get feature actvs, use sae_lens class method. To do this, you must load the sae as the sae class (wrapper over torch model).
 
-# In[10]:
+# In[76]:
 
 
-total_training_steps = 30_000  # probably we should do more
 batch_size = 4096
 total_training_tokens = total_training_steps * batch_size
 
@@ -173,6 +168,8 @@ cfg = LanguageModelSAERunnerConfig(
     is_dataset_tokenized=True,
     streaming=True,  # we could pre-download the token dataset if it was small.
     # SAE Parameters
+    activation_fn = activation_fn_str,
+    activation_fn_kwargs = activation_fn_kwargs,
     mse_loss_normalization=None,  # We won't normalize the mse loss,
     expansion_factor= expa_fac,  # the width of the SAE. Larger will result in better stats but slower training.
     b_dec_init_method="zeros",  # The geometric median can be used to initialize the decoder weights.
@@ -217,7 +214,7 @@ cfg = LanguageModelSAERunnerConfig(
 )
 
 
-# In[11]:
+# In[77]:
 
 
 # https://github.com/jbloomAus/SAELens/blob/main/sae_lens/sae.py#L13
@@ -237,13 +234,13 @@ sae.load_state_dict(state_dict)
 
 # ## save decoder weights
 
-# In[14]:
+# In[78]:
 
 
 weight_matrix_np = sae.W_dec.cpu()
 
 
-# In[15]:
+# In[79]:
 
 
 with open(Wdec_filename, 'wb') as f:
@@ -261,14 +258,14 @@ shutil.copy(source_path, destination_path) # Copy the file
 
 # ## get LLM actvs
 
-# In[16]:
+# In[80]:
 
 
 h_store = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model.cfg.d_model), device=model.cfg.device)
 h_store.shape
 
 
-# In[17]:
+# In[81]:
 
 
 def store_h_hook(
@@ -278,7 +275,7 @@ def store_h_hook(
     h_store[:] = pattern  # this works b/c changes values, not replaces entire thing
 
 
-# In[18]:
+# In[82]:
 
 
 model.run_with_hooks(
@@ -292,7 +289,7 @@ model.run_with_hooks(
 
 # ## get SAE actvs
 
-# In[19]:
+# In[83]:
 
 
 sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
@@ -300,7 +297,7 @@ with torch.no_grad():
     feature_acts = sae.encode(h_store)
 
 
-# In[20]:
+# In[84]:
 
 
 def count_nonzero_features(feature_acts):
@@ -332,7 +329,7 @@ count_nonzero_features(feature_acts)
 
 # Now you have to save actvs, bc saelens not compatible with umap OR cosine sim lib
 
-# In[21]:
+# In[85]:
 
 
 with open(acts_save_path, 'wb') as f:
@@ -346,7 +343,7 @@ destination_path = f'/content/drive/MyDrive/{acts_save_path}'
 shutil.copy(source_path, destination_path) # Copy the file
 
 
-# In[22]:
+# In[86]:
 
 
 # check if saved
@@ -357,7 +354,7 @@ with open(file_path, 'rb') as f:
 
 # ## interpret by dataset examples, keyword search
 
-# In[23]:
+# In[87]:
 
 
 def highest_activating_tokens(
@@ -385,7 +382,7 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
 
 
-# In[24]:
+# In[88]:
 
 
 def store_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
@@ -406,7 +403,7 @@ def store_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
     return s, feat_samps
 
 
-# In[25]:
+# In[89]:
 
 
 # store feature : str of top 5 snippets (contains batchID, val, seq in each substr)
@@ -423,7 +420,7 @@ for feature_idx in range(feature_acts.shape[-1]):
     feat_snip_dict_lst[feature_idx] = feat_samps
 
 
-# In[26]:
+# In[90]:
 
 
 relevant_features = {}
@@ -440,7 +437,7 @@ for f_id, str_output in feat_snip_dict_strs.items():
 
 # ## save datasamps for features
 
-# In[29]:
+# In[91]:
 
 
 with open('feat_snip_dict_strs.pkl', 'wb') as f:
@@ -448,7 +445,7 @@ with open('feat_snip_dict_strs.pkl', 'wb') as f:
 files.download('feat_snip_dict_strs.pkl')
 
 
-# In[30]:
+# In[92]:
 
 
 import json

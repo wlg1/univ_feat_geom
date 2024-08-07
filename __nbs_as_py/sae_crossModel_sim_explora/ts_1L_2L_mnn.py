@@ -3,32 +3,32 @@
 
 # # setup
 
-# In[1]:
+# In[2]:
 
 
 from google.colab import drive
 drive.mount('/content/drive')
 
 
-# In[2]:
+# In[ ]:
 
 
-get_ipython().system('pip install umap-learn')
+# !pip install umap-learn
 
 
-# In[3]:
+# In[7]:
 
 
 import pickle
 import numpy as np
 
-import umap
+# import umap
 import matplotlib.pyplot as plt
 
 
 # # load weight mats
 
-# In[4]:
+# In[8]:
 
 
 # Define the path to your pickle file in Google Drive
@@ -42,13 +42,13 @@ with open(file_path, 'rb') as f:
 print(weight_matrix_np.shape)
 
 
-# In[5]:
+# In[9]:
 
 
 weight_matrix_np = weight_matrix_np.detach().numpy()
 
 
-# In[6]:
+# In[10]:
 
 
 # Define the path to your pickle file in Google Drive
@@ -62,7 +62,57 @@ with open(file_path, 'rb') as f:
 print(weight_matrix_2.shape)
 
 
-# In[7]:
+# # mnn
+
+# In[ ]:
+
+
+import torch
+from sklearn.neighbors import NearestNeighbors
+
+# Number of nearest neighbors to find
+k = 5
+
+# Find k-nearest neighbors for matrix1 in matrix2
+nn1 = NearestNeighbors(n_neighbors=k, algorithm='auto').fit(weight_matrix_2)
+distances1, indices1 = nn1.kneighbors(weight_matrix_np)
+
+# Find k-nearest neighbors for matrix2 in matrix1
+nn2 = NearestNeighbors(n_neighbors=k, algorithm='auto').fit(weight_matrix_np)
+distances2, indices2 = nn2.kneighbors(weight_matrix_2)
+
+# Identify mutual nearest neighbors
+mutual_neighbors = []
+for i in range(len(indices1)):
+    for neighbor in indices1[i]:
+        if i in indices2[neighbor]:
+            mutual_neighbors.append((i, neighbor))
+
+# mutual_neighbors now contains pairs of indices that are mutual nearest neighbors
+print(f"Found {len(mutual_neighbors)} mutual nearest neighbors.")
+
+
+# In[ ]:
+
+
+# Assume mutual_neighbors is a list of pairs (i, j)
+mutual_neighbors = np.array(mutual_neighbors)
+
+# Print some of the mutual nearest neighbor pairs
+print("Some mutual nearest neighbor pairs (indices from matrix1, indices from matrix2):")
+print(mutual_neighbors[:10])  # Printing the first 10 pairs
+
+# If you want to visualize or analyze these pairs further, you can use the indices to extract corresponding points
+# Example: Extracting the first mutual nearest neighbor pair
+i, j = mutual_neighbors[0]
+point_from_matrix1 = weight_matrix_np[i]
+point_from_matrix2 = weight_matrix_2[j]
+
+print(f"Point from matrix1 (index {i}): {point_from_matrix1}")
+print(f"Point from matrix2 (index {j}): {point_from_matrix2}")
+
+
+# In[11]:
 
 
 weight_matrix_2 = weight_matrix_2.detach().numpy()
@@ -188,7 +238,7 @@ files.download('fList_model_A.pkl')
 files.download('fList_model_B.pkl')
 
 
-# In[12]:
+# In[ ]:
 
 
 import pickle
@@ -198,53 +248,9 @@ with open('fList_model_B.pkl', 'rb') as f:
     fList_model_B = pickle.load(f)
 
 
-# # umap
-
-# In[ ]:
-
-
-# import umap
-# import matplotlib.pyplot as plt
-# import pandas as pd
-# import plotly.express as px
-# import plotly.graph_objects as go
-# from plotly.subplots import make_subplots
-# import numpy as np
-
-# reducer = umap.UMAP(n_neighbors=15, min_dist=0.01, metric='euclidean')
-
-# # Fit and transform the data by rows
-# embedding1 = reducer.fit_transform(weight_matrix_np)
-# embedding2 = reducer.fit_transform(weight_matrix_2)
-
-
-# In[ ]:
-
-
-# with open('embedding1.pkl', 'wb') as f:
-#     pickle.dump(embedding1, f)
-# files.download('embedding1.pkl')
-
-# with open('embedding2.pkl', 'wb') as f:
-#     pickle.dump(embedding2, f)
-# files.download('embedding2.pkl')
-
-
-# ## load
-
-# In[13]:
-
-
-import pickle
-with open('embedding_1L_16384.pkl', 'rb') as f:
-    embedding1 = pickle.load(f)
-with open('embedding_2L_16384.pkl', 'rb') as f:
-    embedding2 = pickle.load(f)
-
-
 # # load corr
 
-# In[14]:
+# In[ ]:
 
 
 import pickle
@@ -587,7 +593,7 @@ for feature_idx_B, feature_idx_A in enumerate(highest_correlations_indices[:10])
 
 # # search modB features with keyword, get modA f pair
 
-# In[15]:
+# In[ ]:
 
 
 def find_indices_with_keyword(fList, keyword):
@@ -632,7 +638,7 @@ split_list = fList_model_B[0].split(',')
 [i.replace(' ', '').lower() for i in split_list]
 
 
-# In[16]:
+# In[ ]:
 
 
 def find_indices_with_keyword(fList, keyword):
@@ -860,7 +866,7 @@ keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, hig
 
 # # save umap as html
 
-# In[25]:
+# In[ ]:
 
 
 import umap
@@ -963,7 +969,7 @@ keyword_umaps_html(keyword, embedding1, embedding2, fList_model_A, fList_model_B
 files.download(outputFN)
 
 
-# In[26]:
+# In[ ]:
 
 
 keyword = "upon"
@@ -975,7 +981,7 @@ files.download(outputFN)
 
 # ## color two keywords
 
-# In[23]:
+# In[ ]:
 
 
 import umap
@@ -1077,7 +1083,7 @@ def keyword_umaps_html_2(keyword, kw2, embedding1, embedding2, fList_model_A, fL
     print(f"Plot saved as {output_filename}")
 
 
-# In[24]:
+# In[ ]:
 
 
 keyword = "once"

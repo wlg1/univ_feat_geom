@@ -3,7 +3,7 @@
 
 # # Setup
 
-# In[ ]:
+# In[1]:
 
 
 from google.colab import drive
@@ -12,7 +12,7 @@ import shutil
 drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[2]:
 
 
 try:
@@ -26,7 +26,7 @@ except:
     ipython.run_line_magic("autoreload", "2")
 
 
-# In[ ]:
+# In[3]:
 
 
 import torch
@@ -61,7 +61,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 #     - sae_weight.safetensors (model weights)
 #     - sparsity.safetensors (sparsity estimate)
 
-# In[ ]:
+# In[4]:
 
 
 # from transformer_lens import HookedTransformer
@@ -75,21 +75,24 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # 
 # I've tuned the hyperparameters below for a decent SAE which achieves 86% CE Loss recovered and an L0 of ~85, and runs in about 2 hours on an M3 Max. You can get an SAE that looks better faster if you only consider L0 and CE loss but it will likely have more dense features and more dead features. Here's a link to my output with two runs with two different L1's: https://wandb.ai/jbloom/sae_lens_tutorial .
 
-# In[ ]:
+# In[5]:
 
 
 model_name = "tiny-stories-2L-33M"
+# model_name = "tiny-stories-1L-21M"
 layer_name = "blocks.0.hook_mlp_out"
+hook_layer = 0
 d_in = 1024
-# wandb_project = model_name+"_MLP0_sae"
-wandb_project = model_name+"_MLP0_sae" + "_100k_steps"
+expa_fac = 8
+total_training_steps = 100000  # probably we should do more
+activation_fn_str = "topk"
+activation_fn_kwargs = {"k":32}
+wandb_project = "sae_" + model_name + "_MLP" + str(hook_layer) + "_df" + str(d_in * expa_fac) + "_steps100k" + "_topK"
 
 
 # In[ ]:
 
 
-# total_training_steps = 30_000  # probably we should do more
-total_training_steps = 100000  # probably we should do more
 batch_size = 4096
 total_training_tokens = total_training_steps * batch_size
 
@@ -107,8 +110,10 @@ cfg = LanguageModelSAERunnerConfig(
     is_dataset_tokenized=True,
     streaming=True,  # we could pre-download the token dataset if it was small.
     # SAE Parameters
+    activation_fn = activation_fn_str,
+    activation_fn_kwargs = activation_fn_kwargs,
     mse_loss_normalization=None,  # We won't normalize the mse loss,
-    expansion_factor=16,  # the width of the SAE. Larger will result in better stats but slower training.
+    expansion_factor= expa_fac,  # the width of the SAE. Larger will result in better stats but slower training.
     b_dec_init_method="zeros",  # The geometric median can be used to initialize the decoder weights.
     apply_b_dec_to_input=False,  # We won't apply the decoder weights to the input.
     normalize_sae_decoder=False,
