@@ -1672,3 +1672,102 @@ R_Rp = [set.intersection(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indi
 replaced_sets_list_both = [{kw_dict.get(ind, ind) for ind in s} for s in R_Rp]
 for i, kw_neighs in enumerate(replaced_sets_list_both):
     print(kw_dict[i], ': ', kw_neighs)
+
+"""## only take NN of 1-1 features
+
+get rid of features in B that map to features in A that were already mapped to
+"""
+
+keyword = "she"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+
+new_modB_feats = []
+new_modA_feats = []
+for ind_B, ind_A in zip(modB_feats, modA_feats):
+    if ind_A not in new_modA_feats:
+        new_modA_feats.append(ind_A)
+        new_modB_feats.append(ind_B)
+
+print(len(new_modA_feats), len(list(set(new_modA_feats))))
+print(len(new_modB_feats), len(list(set(new_modB_feats))))
+
+X_subset = weight_matrix_np[new_modA_feats, :]
+Y_subset = weight_matrix_2[new_modB_feats, :]
+
+print(jaccard_similarity(X_subset, Y_subset))
+print(get_rand_scores(new_modA_feats, new_modB_feats))
+
+"""# jaccard on token actvs"""
+
+from typing import List, Set, Union
+
+import numpy as np
+import numpy.typing as npt
+import sklearn.neighbors
+import torch
+
+# from llmcomp.measures.utils import to_numpy_if_needed
+
+
+def _jac_sim_i(idx_R: Set[int], idx_Rp: Set[int]) -> float:
+    return len(idx_R.intersection(idx_Rp)) / len(idx_R.union(idx_Rp))
+
+
+def jaccard_similarity(
+    R: Union[torch.Tensor, npt.NDArray],
+    Rp: Union[torch.Tensor, npt.NDArray],
+    k: int = 10,
+    inner: str = "cosine",
+    n_jobs: int = 8,
+) -> float:
+    R, Rp = to_numpy_if_needed(R, Rp)
+
+    indices_R = nn_array_to_setlist(top_k_neighbors(R, k, inner, n_jobs))
+    indices_Rp = nn_array_to_setlist(top_k_neighbors(Rp, k, inner, n_jobs))
+
+    # all_scores = []
+    # for i, idx_R, idx_Rp in enumerate(zip(indices_R, indices_Rp)):
+    #     if i % 1000 == 0:
+    #         print(idx_R, idx_Rp)
+    #     score = _jac_sim_i(idx_R, idx_Rp)
+    #     all_scores.append(score)
+    # return float(np.mean(all_scores))
+
+    return float(
+        np.mean(
+            [_jac_sim_i(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indices_Rp)]
+        )
+    )
+
+
+def top_k_neighbors(
+    R: npt.NDArray,
+    k: int,
+    inner: str,
+    n_jobs: int,
+) -> npt.NDArray:
+    # k+1 nearest neighbors, because we pass in all the data, which means that a point
+    # will be the nearest neighbor to itself. We remove this point from the results and
+    # report only the k nearest neighbors distinct from the point itself.
+    nns = sklearn.neighbors.NearestNeighbors(
+        n_neighbors=k + 1, metric=inner, n_jobs=n_jobs
+    )
+    nns.fit(R)
+    _, nns = nns.kneighbors(R)
+    return nns[:, 1:]
+
+
+def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
+    return [set(idx) for idx in nn]
+
+reshaped_activations_A.shape
+
+# jaccard_similarity(reshaped_activations_A, reshaped_activations_B)
+
+jaccard_similarity(reshaped_activations_A[:10000, :], reshaped_activations_B[:10000, :])
+
+jaccard_similarity(reshaped_activations_A[:10000, :], reshaped_activations_B[10000:20000, :])
+
+jaccard_similarity(reshaped_activations_A[:10000, :], torch.rand(10000, reshaped_activations_A.shape[1]))
+
