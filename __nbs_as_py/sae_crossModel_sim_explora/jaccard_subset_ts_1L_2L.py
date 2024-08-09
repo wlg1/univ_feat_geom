@@ -1563,3 +1563,112 @@ print(len(mixed_modA_feats))
 print(jaccard_similarity(X_subset, Y_subset, k=5))
 
 print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=5))
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time", "let"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=4))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=4))
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=4))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=4))
+
+"""## see what feat neighs they have in common"""
+
+kw_dict = {}
+for i, kw in enumerate(["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time"]):
+    kw_dict[i] = kw
+
+indices_R = nn_array_to_setlist(top_k_neighbors(X_subset, 4, "cosine", 8))
+replaced_sets_list = [{kw_dict.get(ind, ind) for ind in s} for s in indices_R]
+for i, kw_neighs in enumerate(replaced_sets_list):
+    print(kw_dict[i], ': ', kw_neighs)
+
+indices_Rp = nn_array_to_setlist(top_k_neighbors(Y_subset, 4, "cosine", 8))
+replaced_sets_list_2 = [{kw_dict.get(ind, ind) for ind in s} for s in indices_Rp]
+for i, kw_neighs in enumerate(replaced_sets_list_2):
+    print(kw_dict[i], ': ', kw_neighs)
+
+R_Rp = [set.intersection(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indices_Rp)]
+replaced_sets_list_both = [{kw_dict.get(ind, ind) for ind in s} for s in R_Rp]
+for i, kw_neighs in enumerate(replaced_sets_list_both):
+    print(kw_dict[i], ': ', kw_neighs)
+
+[_jac_sim_i(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indices_Rp)]
+
+rand_modA_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=len(mixed_modA_feats)).tolist()
+rand_X_subset = weight_matrix_np[rand_modA_feats, :]
+indices_R = nn_array_to_setlist(top_k_neighbors(rand_X_subset, 4, "cosine", 8))
+indices_R
+
+"""### another"""
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["girl", "boy", "she", "he", "her", "his", "it"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=2))
+
+# print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
+
+kw_dict = {}
+for i, kw in enumerate(keywords):
+    kw_dict[i] = kw
+
+indices_R = nn_array_to_setlist(top_k_neighbors(X_subset, 2, "cosine", 8))
+replaced_sets_list = [{kw_dict.get(ind, ind) for ind in s} for s in indices_R]
+for i, kw_neighs in enumerate(replaced_sets_list):
+    print(kw_dict[i], ': ', kw_neighs)
+
+indices_Rp = nn_array_to_setlist(top_k_neighbors(Y_subset, 2, "cosine", 8))
+replaced_sets_list_2 = [{kw_dict.get(ind, ind) for ind in s} for s in indices_Rp]
+for i, kw_neighs in enumerate(replaced_sets_list_2):
+    print(kw_dict[i], ': ', kw_neighs)
+
+R_Rp = [set.intersection(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indices_Rp)]
+replaced_sets_list_both = [{kw_dict.get(ind, ind) for ind in s} for s in R_Rp]
+for i, kw_neighs in enumerate(replaced_sets_list_both):
+    print(kw_dict[i], ': ', kw_neighs)
