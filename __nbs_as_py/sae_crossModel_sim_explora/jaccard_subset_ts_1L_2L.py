@@ -108,7 +108,9 @@ reshaped_activations_B.shape
 
 # # load feature labels
 
-# In[13]:
+# ## load
+
+# In[18]:
 
 
 import json
@@ -116,14 +118,14 @@ with open('feature_top_samps_lst_1L_16k.json', 'rb') as f:
     feat_snip_dict = json.load(f)
 
 
-# In[14]:
+# In[19]:
 
 
 with open('feature_top_samps_lst_2L_MLP0_16k.json', 'rb') as f:
     feat_snip_dict_2 = json.load(f)
 
 
-# In[15]:
+# In[20]:
 
 
 import re
@@ -142,7 +144,7 @@ def extract_tagged_word(s):
         return None
 
 
-# In[16]:
+# In[21]:
 
 
 fList_model_A = []
@@ -157,7 +159,7 @@ for feat_dict in feat_snip_dict:
     fList_model_A.append(out_str)
 
 
-# In[17]:
+# In[22]:
 
 
 fList_model_B = []
@@ -171,7 +173,7 @@ for feat_dict in feat_snip_dict_2:
 
 # ## save spliced labels
 
-# In[18]:
+# In[23]:
 
 
 with open('fList_model_A.pkl', 'wb') as f:
@@ -180,7 +182,7 @@ with open('fList_model_B.pkl', 'wb') as f:
     pickle.dump(fList_model_B, f)
 
 
-# In[19]:
+# In[24]:
 
 
 from google.colab import files
@@ -188,7 +190,7 @@ files.download('fList_model_A.pkl')
 files.download('fList_model_B.pkl')
 
 
-# In[20]:
+# In[25]:
 
 
 import pickle
@@ -198,53 +200,9 @@ with open('fList_model_B.pkl', 'rb') as f:
     fList_model_B = pickle.load(f)
 
 
-# # umap
-
-# In[ ]:
-
-
-# import umap
-# import matplotlib.pyplot as plt
-# import pandas as pd
-# import plotly.express as px
-# import plotly.graph_objects as go
-# from plotly.subplots import make_subplots
-# import numpy as np
-
-# reducer = umap.UMAP(n_neighbors=15, min_dist=0.01, metric='euclidean')
-
-# # Fit and transform the data by rows
-# embedding1 = reducer.fit_transform(weight_matrix_np)
-# embedding2 = reducer.fit_transform(weight_matrix_2)
-
-
-# In[ ]:
-
-
-# with open('embedding1.pkl', 'wb') as f:
-#     pickle.dump(embedding1, f)
-# files.download('embedding1.pkl')
-
-# with open('embedding2.pkl', 'wb') as f:
-#     pickle.dump(embedding2, f)
-# files.download('embedding2.pkl')
-
-
-# ## load
-
-# In[ ]:
-
-
-import pickle
-with open('embedding_1L_16384.pkl', 'rb') as f:
-    embedding1 = pickle.load(f)
-with open('embedding_2L_16384.pkl', 'rb') as f:
-    embedding2 = pickle.load(f)
-
-
 # # load corr
 
-# In[21]:
+# In[13]:
 
 
 import pickle
@@ -432,7 +390,7 @@ print(decoded_string)
 
 # ## load dataset tokens
 
-# In[22]:
+# In[ ]:
 
 
 import pickle
@@ -532,7 +490,7 @@ for feature_idx_B, feature_idx_A in enumerate(highest_correlations_indices[:10])
 
 # # search modB features with keyword, get modA f pair
 
-# In[23]:
+# In[26]:
 
 
 def find_indices_with_keyword(fList, keyword):
@@ -555,7 +513,7 @@ def find_indices_with_keyword(fList, keyword):
     return index_list
 
 
-# In[24]:
+# In[27]:
 
 
 def get_values_from_indices(indices, values_list):
@@ -572,7 +530,7 @@ def get_values_from_indices(indices, values_list):
     return [values_list[index] for index in indices]
 
 
-# In[26]:
+# In[ ]:
 
 
 keyword = "king"
@@ -607,6 +565,50 @@ print(fList_model_B[12])
 
 
 # # statically color points on 2 plots
+
+# ## umap
+
+# In[ ]:
+
+
+# import umap
+# import matplotlib.pyplot as plt
+# import pandas as pd
+# import plotly.express as px
+# import plotly.graph_objects as go
+# from plotly.subplots import make_subplots
+# import numpy as np
+
+# reducer = umap.UMAP(n_neighbors=15, min_dist=0.01, metric='euclidean')
+
+# # Fit and transform the data by rows
+# embedding1 = reducer.fit_transform(weight_matrix_np)
+# embedding2 = reducer.fit_transform(weight_matrix_2)
+
+
+# In[ ]:
+
+
+# with open('embedding1.pkl', 'wb') as f:
+#     pickle.dump(embedding1, f)
+# files.download('embedding1.pkl')
+
+# with open('embedding2.pkl', 'wb') as f:
+#     pickle.dump(embedding2, f)
+# files.download('embedding2.pkl')
+
+
+# ## load
+
+# In[ ]:
+
+
+import pickle
+with open('embedding_1L_16384.pkl', 'rb') as f:
+    embedding1 = pickle.load(f)
+with open('embedding_2L_16384.pkl', 'rb') as f:
+    embedding2 = pickle.load(f)
+
 
 # In[ ]:
 
@@ -1086,7 +1088,7 @@ files.download(outputFN)
 
 # ## fns
 
-# In[27]:
+# In[28]:
 
 
 import functools
@@ -1192,7 +1194,7 @@ class Pipeline:
         )
 
 
-# In[28]:
+# In[29]:
 
 
 from typing import List, Set, Union
@@ -1251,18 +1253,36 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
 
 # ## entire space
 
-# In[77]:
+# In[ ]:
 
 
 jaccard_similarity(weight_matrix_np, weight_matrix_2)
 
 
+# In[74]:
+
+
+jaccard_similarity(weight_matrix_np[highest_correlations_indices_v1], weight_matrix_2)
+
+
+# In[77]:
+
+
+weight_matrix_2.shape[0]
+
+
+# In[76]:
+
+
+len(list(set(highest_correlations_indices_v1)))
+
+
 # ## single token subspaces
 
-# In[63]:
+# In[65]:
 
 
-def get_rand_scores(modA_feats, modB_feats):
+def get_rand_scores(modA_feats, modB_feats, k: int = 10):
     total_scores = 0
     for i in range(100):
         # if i % 20 == 0:
@@ -1272,12 +1292,12 @@ def get_rand_scores(modA_feats, modB_feats):
         X_subset = weight_matrix_np[rand_modA_feats, :]
         Y_subset = weight_matrix_2[rand_modB_feats, :]
 
-        total_scores += jaccard_similarity(X_subset, Y_subset)
+        total_scores += jaccard_similarity(X_subset, Y_subset, k)
 
     return total_scores / 100
 
 
-# In[64]:
+# In[ ]:
 
 
 keyword = "upon"
@@ -1290,7 +1310,7 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
-# In[66]:
+# In[ ]:
 
 
 keyword = "once"
@@ -1303,7 +1323,7 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
-# In[65]:
+# In[ ]:
 
 
 keyword = "she"
@@ -1316,9 +1336,22 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
+# In[70]:
+
+
+keyword = "let"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+X_subset = weight_matrix_np[modA_feats, :]
+Y_subset = weight_matrix_2[modB_feats, :]
+print(len(X_subset))
+print(jaccard_similarity(X_subset, Y_subset, k=4))
+print(get_rand_scores(modA_feats, modB_feats, k=4))
+
+
 # ## multiple token subspaces
 
-# In[67]:
+# In[ ]:
 
 
 keyword_1 = "she"
@@ -1332,7 +1365,7 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
-# In[69]:
+# In[ ]:
 
 
 keyword_1 = "she"
@@ -1346,7 +1379,7 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
-# In[68]:
+# In[62]:
 
 
 keyword_1 = "princess"
@@ -1360,7 +1393,21 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
-# In[70]:
+# In[67]:
+
+
+keyword_1 = "princess"
+keyword_2 = "dragon"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+X_subset = weight_matrix_np[modA_feats, :]
+Y_subset = weight_matrix_2[modB_feats, :]
+print(len(X_subset))
+print(jaccard_similarity(X_subset, Y_subset, k = 3))
+print(get_rand_scores(modA_feats, modB_feats, k =3))
+
+
+# In[ ]:
 
 
 keyword_1 = "once"
@@ -1374,7 +1421,7 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
-# In[75]:
+# In[ ]:
 
 
 keyword_1 = "once"
@@ -1390,7 +1437,7 @@ print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
 
 
-# In[76]:
+# In[ ]:
 
 
 keyword_1 = "once"
@@ -1420,4 +1467,460 @@ Y_subset = weight_matrix_2[modB_feats, :]
 print(len(X_subset))
 print(jaccard_similarity(X_subset, Y_subset))
 print(get_rand_scores(modA_feats, modB_feats))
+
+
+# In[71]:
+
+
+keyword_1 = "time"
+keyword_2 = "she"
+keyword_3 = "let"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2) + \
+                find_indices_with_keyword(fList_model_B, keyword_3)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+X_subset = weight_matrix_np[modA_feats, :]
+Y_subset = weight_matrix_2[modB_feats, :]
+print(len(X_subset))
+print(jaccard_similarity(X_subset, Y_subset))
+print(get_rand_scores(modA_feats, modB_feats))
+
+
+# In[32]:
+
+
+keyword_1 = "time"
+keyword_2 = "she"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+X_subset = weight_matrix_np[modA_feats, :]
+Y_subset = weight_matrix_2[modB_feats, :]
+print(len(X_subset))
+print(jaccard_similarity(X_subset, Y_subset))
+print(get_rand_scores(modA_feats, modB_feats))
+
+
+# In[42]:
+
+
+keyword_1 = "once"
+keyword_2 = "she"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+X_subset = weight_matrix_np[modA_feats, :]
+Y_subset = weight_matrix_2[modB_feats, :]
+print(len(X_subset))
+print(jaccard_similarity(X_subset, Y_subset))
+print(get_rand_scores(modA_feats, modB_feats))
+
+
+# ## compare feats from diff clusters to check
+
+# In[46]:
+
+
+keyword_1 = "time"
+modB_feats_1 = find_indices_with_keyword(fList_model_B, keyword_1)
+len(modB_feats_1)
+
+
+# In[47]:
+
+
+keyword_2 = "she"
+modB_feats_2 = find_indices_with_keyword(fList_model_B, keyword_2)
+modA_feats_2 = get_values_from_indices(modB_feats_2, highest_correlations_indices_v1)
+len(modA_feats_2)
+
+
+# In[48]:
+
+
+minInd = min(len(modB_feats_1), len(modA_feats_2))
+X_subset = weight_matrix_np[modA_feats_2[:minInd], :]
+Y_subset = weight_matrix_2[modB_feats_1[:minInd], :]
+print(len(X_subset))
+print(jaccard_similarity(X_subset, Y_subset))
+
+
+# ### more exmaples
+
+# In[73]:
+
+
+keyword_1 = "once"
+modB_feats_1 = find_indices_with_keyword(fList_model_B, keyword_1)
+len(modB_feats_1)
+
+keyword_2 = "he"
+modB_feats_2 = find_indices_with_keyword(fList_model_B, keyword_2)
+modA_feats_2 = get_values_from_indices(modB_feats_2, highest_correlations_indices_v1)
+len(modA_feats_2)
+
+minInd = min(len(modB_feats_1), len(modA_feats_2))
+X_subset = weight_matrix_np[modA_feats_2[:minInd], :]
+Y_subset = weight_matrix_2[modB_feats_1[:minInd], :]
+print(len(X_subset))
+print(jaccard_similarity(X_subset, Y_subset, k=4))
+# print(get_rand_scores(modA_feats, modB_feats))
+
+
+# In[ ]:
+
+
+
+
+
+# ## corr explora
+
+# In[39]:
+
+
+modA_feats[:3]
+
+
+# In[40]:
+
+
+weight_matrix_np[modA_feats[:3], :]
+
+
+# In[41]:
+
+
+weight_matrix_np[13316, :]
+
+
+# In[49]:
+
+
+weight_matrix_np[[1,1,2], :]
+
+
+# In[57]:
+
+
+keyword_1 = "once"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword_1)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+X_subset = weight_matrix_np[modA_feats, :]
+Y_subset = weight_matrix_2[modB_feats, :]
+print(len(list(set(modA_feats))))
+len(list(set(modB_feats)))
+
+
+# In[58]:
+
+
+keyword_1 = "she"
+modB_feats = find_indices_with_keyword(fList_model_B, keyword_1)
+modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+X_subset = weight_matrix_np[modA_feats, :]
+Y_subset = weight_matrix_2[modB_feats, :]
+print(len(list(set(modA_feats))))
+len(list(set(modB_feats)))
+
+
+# In[60]:
+
+
+# Generate 50 unique indices
+unique_feats_A = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=50).tolist()
+
+# Create a list with repeats by duplicating the unique elements
+rand_modA_feats = unique_feats_A + unique_feats_A
+
+# Shuffle the list to mix unique and repeated elements
+np.random.shuffle(rand_modA_feats)
+
+# Ensure rand_modB_feats remains fully random
+rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=100).tolist()
+
+# Subset the weight matrices using the selected features
+X_subset = weight_matrix_np[rand_modA_feats, :]
+Y_subset = weight_matrix_2[rand_modB_feats, :]
+
+# Update total_scores with the Jaccard similarity between the subsets
+jaccard_similarity(X_subset, Y_subset)
+
+
+# In[78]:
+
+
+# Generate 50 unique indices
+unique_feats_A = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=10).tolist()
+
+# Create a list with repeats by duplicating the unique elements
+rand_modA_feats = unique_feats_A + unique_feats_A
+
+# Shuffle the list to mix unique and repeated elements
+np.random.shuffle(rand_modA_feats)
+
+# Ensure rand_modB_feats remains fully random
+rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=20).tolist()
+
+# Subset the weight matrices using the selected features
+X_subset = weight_matrix_np[rand_modA_feats, :]
+Y_subset = weight_matrix_2[rand_modB_feats, :]
+
+# Update total_scores with the Jaccard similarity between the subsets
+jaccard_similarity(X_subset, Y_subset, k=3)
+
+
+# ## jaccard explora
+
+# In[ ]:
+
+
+
+
+
+# ## sel one from each category
+
+# This prob won't succeed at first so you need to refine this.
+
+# In[80]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
+
+for kw in keywords:
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+jaccard_similarity(X_subset, Y_subset, k=3)
+
+
+# In[81]:
+
+
+len(mixed_modA_feats)
+
+
+# In[82]:
+
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
+
+
+# In[84]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
+
+for kw in keywords:
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.extend(modA_feats[0:2])
+    mixed_modB_feats.extend(modB_feats[0:2])
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
+
+
+# In[85]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
+
+for kw in keywords:
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.extend(modA_feats[0:5])
+    mixed_modB_feats.extend(modB_feats[0:5])
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
+
+
+# In[101]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
+
+for kw in keywords:
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.extend(modA_feats[0:5])
+    mixed_modB_feats.extend(modB_feats[0:5])
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=10))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=10))
+
+
+# In[93]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", ".", "family"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
+
+
+# In[95]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["once", "upon", "a", "time"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
+
+
+# In[97]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["girl", "boy", "princess", "dragon"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
+
+
+# In[98]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["girl", "boy", "princess", "dragon", "she", "he"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
+
+
+# In[99]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["girl", "boy", "she", "he"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
+
+
+# In[103]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+
+keywords = ["girl", "boy", "she", "he", "her", "his", "it"]
+
+for kw in keywords:
+    print(kw + ": ")
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
+    mixed_modA_feats.append(modA_feats[0])
+    mixed_modB_feats.append(modB_feats[0])
+    print(len(modB_feats), len(list(set(modA_feats))))
+
+X_subset = weight_matrix_np[mixed_modA_feats, :]
+Y_subset = weight_matrix_2[mixed_modB_feats, :]
+print(len(mixed_modA_feats))
+print(jaccard_similarity(X_subset, Y_subset, k=3))
+
+print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
+
+
+# In[ ]:
+
+
+
 
