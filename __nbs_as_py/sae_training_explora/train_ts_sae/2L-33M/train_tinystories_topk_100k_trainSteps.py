@@ -83,11 +83,11 @@ model_name = "tiny-stories-2L-33M"
 layer_name = "blocks.0.hook_mlp_out"
 hook_layer = 0
 d_in = 1024
-expa_fac = 8
+expa_fac = 32 # 8
 total_training_steps = 100000  # probably we should do more
-activation_fn_str = "topk"
-activation_fn_kwargs = {"k":32}
-wandb_project = "sae_" + model_name + "_MLP" + str(hook_layer) + "_df" + str(d_in * expa_fac) + "_steps100k" + "_topK"
+# activation_fn_str = "topk"
+# activation_fn_kwargs = {"k":32}
+wandb_project = "sae_" + model_name + "_MLP" + str(hook_layer) + "_df" + str(d_in * expa_fac) + "_steps100k" # + "_topK"
 
 
 # In[ ]:
@@ -110,8 +110,8 @@ cfg = LanguageModelSAERunnerConfig(
     is_dataset_tokenized=True,
     streaming=True,  # we could pre-download the token dataset if it was small.
     # SAE Parameters
-    activation_fn = activation_fn_str,
-    activation_fn_kwargs = activation_fn_kwargs,
+    # activation_fn = activation_fn_str,
+    # activation_fn_kwargs = activation_fn_kwargs,
     mse_loss_normalization=None,  # We won't normalize the mse loss,
     expansion_factor= expa_fac,  # the width of the SAE. Larger will result in better stats but slower training.
     b_dec_init_method="zeros",  # The geometric median can be used to initialize the decoder weights.

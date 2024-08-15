@@ -10,14 +10,14 @@ from google.colab import drive
 drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[2]:
 
 
 # %%capture
 get_ipython().system('pip install kmapper matplotlib numpy scikit_learn umap umap-learn')
 
 
-# In[ ]:
+# In[3]:
 
 
 import pickle
@@ -33,18 +33,17 @@ import matplotlib.pyplot as plt
 
 # # load sae features
 
-# In[ ]:
+# In[4]:
 
 
-# fn = 'ts-1L-21M_Wdec'
-# fn = 'ts-2L-33M_Wdec'
+fn = 'ts-1L-21M_Wdec'
 # fn = 'ts-2L-33M_Wdec'
 file_path = f'/content/drive/MyDrive/{fn}.pkl'
 with open(file_path, 'rb') as f:
     feature_weights = pickle.load(f)
 
 
-# In[ ]:
+# In[5]:
 
 
 data = feature_weights.detach().cpu().numpy()
@@ -53,16 +52,16 @@ data.shape
 
 # # load labels
 
-# In[ ]:
+# In[9]:
 
 
 import json
-# with open('feature_top_samps_lst_16k.json', 'rb') as f:
-with open('feature_top_samps_lst_2L_MLP0.json', 'rb') as f:
+with open('feature_top_samps_lst_1L_16k.json', 'rb') as f:
+# with open('feature_top_samps_lst_2L_MLP0.json', 'rb') as f:
     feat_snip_dict = json.load(f)
 
 
-# In[ ]:
+# In[10]:
 
 
 import re
@@ -81,7 +80,7 @@ def extract_tagged_word(s):
         return None
 
 
-# In[ ]:
+# In[11]:
 
 
 fList_model_A = []
@@ -96,13 +95,13 @@ for feat_dict in feat_snip_dict:
     # fList_model_A.append(out_str)
 
 
-# In[ ]:
+# In[12]:
 
 
 fList_model_A[:5]
 
 
-# In[ ]:
+# In[13]:
 
 
 fList_model_A = np.array(fList_model_A)
@@ -111,19 +110,27 @@ len(fList_model_A)
 
 # # Mapper
 
-# In[ ]:
+# In[14]:
+
+
+from sklearn.decomposition import PCA
+
+
+# In[20]:
 
 
 mapper = km.KeplerMapper(verbose=1) # initialize mapper
 
 # project data into 2D subspace via 2 step transformation, 1)isomap 2)UMAP
-projected_data = mapper.fit_transform(data, projection=[manifold.Isomap(n_components=100, n_jobs=-1), umap.UMAP(n_components=2,random_state=1)])
+# projected_data = mapper.fit_transform(data, projection=[manifold.Isomap(n_components=100, n_jobs=-1), umap.UMAP(n_components=2,random_state=1)])
+# projected_data = mapper.fit_transform(data, projection=PCA(n_components=2))
+projected_data = mapper.fit_transform(data, projection="l2norm")
 
 # cluster data using DBSCAN
 graph = mapper.map(projected_data, data, clusterer=sklearn.cluster.DBSCAN(metric="cosine"))
 
 
-# In[ ]:
+# In[21]:
 
 
 # define an excessively long filename (helpful if saving multiple Mapper variants for single dataset)
@@ -136,14 +143,14 @@ fileID = fn + '_projection=' + graph['meta_data']['projection'].split('(')[0] + 
 fileID
 
 
-# In[ ]:
+# In[22]:
 
 
 labels = list(range(data.shape[0]))
 labels = np.array(labels)
 
 
-# In[ ]:
+# In[23]:
 
 
 mapper.visualize(graph,
@@ -156,7 +163,7 @@ mapper.visualize(graph,
                 node_color_function = np.array(['average', 'std', 'sum', 'max', 'min']))
 
 
-# In[ ]:
+# In[24]:
 
 
 from google.colab import files
