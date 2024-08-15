@@ -40,7 +40,7 @@ def get_synth_actvs(
     device = grTrue_feats.device
     dtype = torch.float32
 
-    h = grTrue_feats.shape[0]  # model dimensions
+    # h = grTrue_feats.shape[0]  # model dimensions
     G = grTrue_feats.shape[1]  # number of ground truth features
 
     # for step 1; same for each batch
