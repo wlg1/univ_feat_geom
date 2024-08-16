@@ -116,6 +116,62 @@ U2, S2_SAE, Vt2 = np.linalg.svd(weight_matrix_2)
 matPair_to_l2Dist['SAE_SAE'], matPair_to_l2Dist_norma['SAE_SAE'] = compare_singular_values(S1_SAE, S2_SAE)
 
 
+# ## compare after SAE corrs
+
+# In[ ]:
+
+
+# U2, S2_SAE, Vt2 = np.linalg.svd(weight_matrix_2)
+
+
+# In[ ]:
+
+
+import pickle
+with open('highest_corr_inds_1L_2L_MLP0_16k_30k_relu.pkl', 'rb') as f:
+    highest_correlations_indices_saes = pickle.load(f)
+# with open('highest_corr_vals_1L_2L_MLP0_16k_30k_relu.pkl', 'rb') as f:
+#     highest_correlations_values_saes = pickle.load(f)
+
+
+# In[ ]:
+
+
+U1, S1_SAE_corr, Vt1 = np.linalg.svd(weight_matrix_1[highest_correlations_indices_saes])
+# U2, S2_SAE, Vt2 = np.linalg.svd(weight_matrix_2)
+
+
+# In[ ]:
+
+
+# matPair_to_l2Dist['SAE_SAE'], matPair_to_l2Dist_norma['SAE_SAE'] =
+compare_singular_values(S1_SAE_corr, S2_SAE)
+
+
+# In[ ]:
+
+
+S1_SAE
+
+
+# In[ ]:
+
+
+S1_SAE_corr
+
+
+# In[ ]:
+
+
+compare_singular_values(S1_SAE_corr, S1_SAE)
+
+
+# In[ ]:
+
+
+compare_singular_values(S1_SAE, S1_SAE_corr)
+
+
 # # compare to random weights
 
 # ## compare two rand
@@ -148,7 +204,7 @@ matPair_to_l2Dist['SAE_rand'], matPair_to_l2Dist_norma['SAE_rand'] = compare_sin
 
 # ## load and get svd
 
-# In[79]:
+# In[ ]:
 
 
 from transformers import AutoModelForCausalLM
@@ -158,7 +214,7 @@ mlp_weights = model.transformer.h[0].mlp.c_proj.weight
 mlp_weights.shape
 
 
-# In[80]:
+# In[ ]:
 
 
 model_2 = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-2Layers-33M")
@@ -166,14 +222,14 @@ mlp_weights_2 = model_2.transformer.h[0].mlp.c_proj.weight
 mlp_weights_2.shape
 
 
-# In[81]:
+# In[ ]:
 
 
 U1, S1_LLM, Vt1 = np.linalg.svd(mlp_weights.detach().numpy())
 U2, S2_LLM, Vt2 = np.linalg.svd(mlp_weights_2.detach().numpy())
 
 
-# In[96]:
+# In[ ]:
 
 
 mlp_weights_cfc = model.transformer.h[0].mlp.c_fc.weight
@@ -182,16 +238,24 @@ U1, S1_LLM_cfc, Vt1 = np.linalg.svd(mlp_weights_cfc.detach().numpy())
 
 # ## compare LLMs (MLP0)
 
-# In[82]:
+# In[ ]:
 
 
 # matPair_to_l2Dist['LLM_LLM_samelayer'], matPair_to_l2Dist_norma['LLM_LLM_samelayer'] = compare_singular_values(S1_LLM, S2_LLM)
 matPair_to_l2Dist['tsLLM_tsLLM'], matPair_to_l2Dist_norma['tsLLM_tsLLM'] = compare_singular_values(S1_LLM, S2_LLM)
 
 
+# ### compare after corr
+
+# In[ ]:
+
+
+
+
+
 # ## LLM to rand
 
-# In[83]:
+# In[ ]:
 
 
 matPair_to_l2Dist['tsLLM_rand'], matPair_to_l2Dist_norma['tsLLM_rand'] = compare_singular_values(S1_LLM, S1_rand)
@@ -199,20 +263,20 @@ matPair_to_l2Dist['tsLLM_rand'], matPair_to_l2Dist_norma['tsLLM_rand'] = compare
 
 # ## LLM_1 (MLP0) to LLM_2 (MLP1)
 
-# In[84]:
+# In[ ]:
 
 
 mlp_weights_2b = model_2.transformer.h[1].mlp.c_proj.weight  # Example for GPT-like models
 mlp_weights_2b.shape
 
 
-# In[85]:
+# In[ ]:
 
 
 U2, S2_LLM_MLP1, Vt2 = np.linalg.svd(mlp_weights_2b.detach().numpy())
 
 
-# In[86]:
+# In[ ]:
 
 
 # matPair_to_l2Dist['LLM_LLM_difflayer'], matPair_to_l2Dist_norma['LLM_LLM_difflayer'] =
@@ -221,14 +285,14 @@ compare_singular_values(S1_LLM, S2_LLM_MLP1)
 
 # ## compare saes to LLMs
 
-# In[87]:
+# In[ ]:
 
 
 # matPair_to_l2Dist['LLM_SAE_sameMod'], matPair_to_l2Dist_norma['LLM_SAE_sameMod'] = compare_singular_values(S1_LLM, S1_SAE)
 compare_singular_values(S1_LLM, S1_SAE)
 
 
-# In[88]:
+# In[ ]:
 
 
 # matPair_to_l2Dist['LLM_SAE_diffMod'], matPair_to_l2Dist_norma['LLM_SAE_diffMod'] = compare_singular_values(S1_LLM, S2_SAE)
@@ -245,26 +309,26 @@ compare_singular_values(S1_LLM, S2_SAE)
 gpt2_med = AutoModelForCausalLM.from_pretrained("openai-community/gpt2-medium")
 
 
-# In[92]:
+# In[ ]:
 
 
 gpt2_med.transformer.h[0].mlp
 
 
-# In[94]:
+# In[ ]:
 
 
 gpt2_med.transformer.h[0].mlp.c_fc.weight.shape
 
 
-# In[90]:
+# In[ ]:
 
 
 mlp0_weights_gpt2_med = gpt2_med.transformer.h[0].mlp.c_proj.weight
 mlp0_weights_gpt2_med.shape
 
 
-# In[91]:
+# In[ ]:
 
 
 U2, S_GPT2_0, Vt2 = np.linalg.svd(mlp0_weights_gpt2_med.detach().numpy())
@@ -276,7 +340,7 @@ U2, S_GPT2_0, Vt2 = np.linalg.svd(mlp0_weights_gpt2_med.detach().numpy())
 S_GPT2_0.shape
 
 
-# In[98]:
+# In[ ]:
 
 
 mlp0_weights_gpt2_med_cfc = gpt2_med.transformer.h[0].mlp.c_fc.weight
@@ -285,26 +349,26 @@ U2, S_GPT2_0_cfc, Vt2 = np.linalg.svd(mlp0_weights_gpt2_med_cfc.detach().numpy()
 
 # ## GPT2 L0
 
-# In[99]:
+# In[ ]:
 
 
 compare_singular_values(S_GPT2_0_cfc, S_GPT2_0)
 
 
-# In[97]:
+# In[ ]:
 
 
 matPair_to_l2Dist['ts_GPT2'], matPair_to_l2Dist_norma['ts_GPT2'] = compare_singular_values(S1_LLM_cfc, S_GPT2_0)
 
 
-# In[100]:
+# In[ ]:
 
 
 # matPair_to_l2Dist['LLM_GPT2_sameLayer'], matPair_to_l2Dist_norma['LLM_GPT2_sameLayer'] = compare_singular_values(S2_LLM, S_GPT2_0)
 matPair_to_l2Dist['ts_GPT2'], matPair_to_l2Dist_norma['ts_GPT2'] = compare_singular_values(S2_LLM, S_GPT2_0)
 
 
-# In[101]:
+# In[ ]:
 
 
 # matPair_to_l2Dist['LLM_GPT2_diffLayer'], matPair_to_l2Dist_norma['LLM_GPT2_diffLayer'] = compare_singular_values(S2_LLM_MLP1, S_GPT2_0)
@@ -445,7 +509,30 @@ compare_singular_values(S_pythia410_mlp17, S1_SAE)
 
 # # summarize results
 
-# In[102]:
+# In[ ]:
+
+
+def plot_dict_on_number_line(data):
+    sorted_data = sorted(data.items(), key=lambda x: x[1])
+
+    keys = [item[0] for item in sorted_data]
+    values = [item[1] for item in sorted_data]
+
+    colors = plt.cm.viridis(np.linspace(0, 1, len(keys)))
+
+    fig, ax = plt.subplots()
+    for i, (key, value) in enumerate(zip(keys, values)):
+        ax.scatter(value, 0, color=colors[i], label=key, s=100)  # 's' adjusts the size of the point
+
+    ax.yaxis.set_visible(False)
+    ax.set_title('L2 dist for singular vals of matrix pairs')
+    ax.grid(True)
+    ax.legend(title="Key", loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=3)
+
+    plt.show()
+
+
+# In[ ]:
 
 
 def plot_dict_on_number_line(data):
@@ -480,13 +567,13 @@ def plot_dict_on_number_line(data):
     plt.show()
 
 
-# In[103]:
+# In[ ]:
 
 
 plot_dict_on_number_line(matPair_to_l2Dist)
 
 
-# In[104]:
+# In[ ]:
 
 
 plot_dict_on_number_line(matPair_to_l2Dist_norma)
@@ -494,7 +581,7 @@ plot_dict_on_number_line(matPair_to_l2Dist_norma)
 
 # ## single num line plots
 
-# In[107]:
+# In[ ]:
 
 
 def plot1D_dict_on_number_line(data, norma_bool=False):
@@ -530,14 +617,14 @@ def plot1D_dict_on_number_line(data, norma_bool=False):
     plt.show()
 
 
-# In[108]:
+# In[ ]:
 
 
 # dont use this as labels too close
 plot1D_dict_on_number_line(matPair_to_l2Dist, norma_bool=False)
 
 
-# In[111]:
+# In[ ]:
 
 
 import matplotlib.pyplot as plt
@@ -593,7 +680,7 @@ def plot1D_dict_on_number_line(data, norma_bool=False):
     plt.show()
 
 
-# In[112]:
+# In[ ]:
 
 
 matPair_to_l2Dist_norma_2 = matPair_to_l2Dist_norma.copy()
@@ -602,7 +689,7 @@ _, matPair_to_l2Dist_norma_2['tsLLM_pythia'] = compare_singular_values(S_pythia4
 plot1D_dict_on_number_line(matPair_to_l2Dist_norma_2, norma_bool=True)
 
 
-# In[113]:
+# In[ ]:
 
 
 matPair_to_l2Dist_norma_2
@@ -662,75 +749,75 @@ print(weight_matrix_2_100kTrain.shape)
 
 # ## compare
 
-# In[114]:
+# In[ ]:
 
 
 U1, S1_SAE_100k, Vt1 = np.linalg.svd(weight_matrix_1_100kTrain)
 U2, S2_SAE_100k, Vt2 = np.linalg.svd(weight_matrix_2_100kTrain)
 
 
-# In[115]:
+# In[ ]:
 
 
 matPair_to_l2Dist['SAE30k_SAE100k'], matPair_to_l2Dist_norma['SAE30k_SAE100k'] = compare_singular_values(S1_SAE, S1_SAE_100k)
 
 
-# In[116]:
+# In[ ]:
 
 
 matPair_to_l2Dist['SAE100k_SAE100k'], matPair_to_l2Dist_norma['SAE100k_SAE100k'] = compare_singular_values(S1_SAE_100k, S2_SAE_100k)
 
 
-# In[117]:
+# In[ ]:
 
 
 matPair_to_l2Dist['SAE_rand'], matPair_to_l2Dist_norma['SAE_rand'] = compare_singular_values(S1_SAE_100k, S2_rand)
 
 
-# In[118]:
+# In[ ]:
 
 
 compare_singular_values(S1_SAE_100k, S1_rand)
 
 
-# In[119]:
+# In[ ]:
 
 
 compare_singular_values(S1_SAE, S1_rand)
 
 
-# In[120]:
+# In[ ]:
 
 
 matPair_to_l2Dist['ts_ts'], matPair_to_l2Dist_norma['ts_ts'] = compare_singular_values(S1_LLM, S2_LLM)
 
 
-# In[121]:
+# In[ ]:
 
 
 matPair_to_l2Dist['ts_rand'], matPair_to_l2Dist_norma['ts_rand'] = compare_singular_values(S1_LLM, S1_rand)
 
 
-# In[122]:
+# In[ ]:
 
 
 # matPair_to_l2Dist['LLM_GPT2_sameLayer'], matPair_to_l2Dist_norma['LLM_GPT2_sameLayer'] = compare_singular_values(S2_LLM, S_GPT2_0)
 matPair_to_l2Dist['ts_GPT2'], matPair_to_l2Dist_norma['ts_GPT2'] = compare_singular_values(S2_LLM, S_GPT2_0)
 
 
-# In[123]:
+# In[ ]:
 
 
 matPair_to_l2Dist['ts_pythia'], matPair_to_l2Dist_norma['ts_pythia'] = compare_singular_values(S_pythia410_mlp0, S1_LLM)
 
 
-# In[124]:
+# In[ ]:
 
 
 compare_singular_values(S_pythia410_mlp0, S1_rand)
 
 
-# In[125]:
+# In[ ]:
 
 
 def plot1D_dict_on_number_line(data, norma_bool=False):
@@ -792,19 +879,19 @@ def plot1D_dict_on_number_line(data, norma_bool=False):
     plt.show()
 
 
-# In[126]:
+# In[ ]:
 
 
 plot1D_dict_on_number_line(matPair_to_l2Dist_norma, norma_bool=True)
 
 
-# In[127]:
+# In[ ]:
 
 
 matPair_to_l2Dist_norma
 
 
-# In[128]:
+# In[ ]:
 
 
 matPair_to_l2Dist_norma_2 = matPair_to_l2Dist_norma.copy()
@@ -814,7 +901,7 @@ del matPair_to_l2Dist_norma_2['SAE_SAE']
 plot1D_dict_on_number_line(matPair_to_l2Dist_norma_2, norma_bool=True)
 
 
-# In[128]:
+# In[ ]:
 
 
 
