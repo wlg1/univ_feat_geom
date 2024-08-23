@@ -3,20 +3,20 @@
 
 # # setup
 
-# In[1]:
+# In[ ]:
 
 
 from google.colab import drive
 drive.mount('/content/drive')
 
 
-# In[2]:
+# In[ ]:
 
 
 # !pip install umap-learn
 
 
-# In[3]:
+# In[ ]:
 
 
 import pickle
@@ -26,13 +26,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+# In[ ]:
+
+
+import torch
+
+
 # # load weight mats
 
 # In[ ]:
 
 
 # Define the path to your pickle file in Google Drive
-file_path = '/content/drive/MyDrive/ts-1L-21M_Wdec.pkl'  # Change the path if necessary
+file_path = '/content/drive/MyDrive/sae_files/ts-1L-21M_Wdec.pkl'  # Change the path if necessary
 
 # Load the weight matrix from the pickle file
 with open(file_path, 'rb') as f:
@@ -52,7 +58,7 @@ weight_matrix_np = weight_matrix_np.detach().numpy()
 
 
 # Define the path to your pickle file in Google Drive
-file_path = '/content/drive/MyDrive/ts-2L-33M_Wdec.pkl'  # Change the path if necessary
+file_path = '/content/drive/MyDrive/sae_files/gpt2sm_mlp0_Wdec.pkl'  # Change the path if necessary
 
 # Load the weight matrix from the pickle file
 with open(file_path, 'rb') as f:
@@ -70,29 +76,35 @@ weight_matrix_2 = weight_matrix_2.detach().numpy()
 
 # # load sae f actvs
 
-# In[4]:
+# In[ ]:
 
 
-file_path = '/content/drive/MyDrive/fActs_ts_1L_21M_anySamps_v1.pkl'
+file_path = '/content/drive/MyDrive/sae_files/fActs_ts_1L_21M_anySamps_v1.pkl'
 with open(file_path, 'rb') as f:
     feature_acts_model_A = pickle.load(f)
 
 
-# In[5]:
+# In[ ]:
 
 
-file_path = '/content/drive/MyDrive/fActs_ts_2L_33M_anySamps_v1.pkl'
+file_path = '/content/drive/MyDrive/sae_files/fActs_GPT2sm_MLP0.pkl'
 with open(file_path, 'rb') as f:
     feature_acts_model_B = pickle.load(f)
 
 
-# In[6]:
+# In[ ]:
+
+
+feature_acts_model_A.shape
+
+
+# In[ ]:
 
 
 feature_acts_model_B.shape
 
 
-# In[7]:
+# In[ ]:
 
 
 first_dim_reshaped = feature_acts_model_A.shape[0] * feature_acts_model_A.shape[1]
@@ -100,10 +112,39 @@ reshaped_activations_A = feature_acts_model_A.reshape(first_dim_reshaped, featur
 reshaped_activations_B = feature_acts_model_B.reshape(first_dim_reshaped, feature_acts_model_B.shape[-1]).cpu()
 
 
-# In[8]:
+# In[ ]:
 
 
 reshaped_activations_B.shape
+
+
+# In[ ]:
+
+
+reshaped_activations_A = reshaped_activations_A[0:9000, :]
+reshaped_activations_B = reshaped_activations_B[0:9000, :]
+reshaped_activations_B.shape
+
+
+# In[ ]:
+
+
+reshaped_activations_A.shape
+
+
+# In[ ]:
+
+
+reshaped_activations_B = reshaped_activations_B[:, :16384]
+reshaped_activations_B.shape
+
+
+# In[ ]:
+
+
+del feature_acts_model_B
+del feature_acts_model_A
+torch.cuda.empty_cache()
 
 
 # # load feature labels
@@ -214,80 +255,7 @@ with open('highest_corr_vals_1L_2L_MLP0_16k_30k_relu.pkl', 'rb') as f:
 
 # # corr mat
 
-# ## plot feature actv corrs
-
-# In[ ]:
-
-
-import matplotlib.pyplot as plt
-
-
-# In[ ]:
-
-
-model_A_f_ind = 11654
-model_B_f_ind = 3103
-
-feature_0_actvs_A = reshaped_activations_A[:, model_A_f_ind].numpy()
-feature_0_actvs_B = reshaped_activations_B[:, model_B_f_ind].numpy()
-
-corr = np.corrcoef(feature_0_actvs_A, feature_0_actvs_B)[0, 1]
-print(corr)
-
-plt.scatter(feature_0_actvs_A, feature_0_actvs_B, alpha=0.5)
-
-plt.xlabel('Feature Activations (Model A)')
-plt.ylabel('Feature Activations (Model B)')
-plt.title('Feature Activations (A/16251 vs B/11654)\n Corr = ' + str(corr))
-
-plt.tight_layout()
-plt.show()
-
-
 # ## get all actv corrs
-
-# In[ ]:
-
-
-import torch
-import numpy as np
-
-def top_ind_from_B(ind, reshaped_activations_A, reshaped_activations_B):
-    # Select a column from matrix B
-    column_A = reshaped_activations_B[:, ind]
-
-    # Ensure tensors are on GPU
-    if torch.cuda.is_available():
-        reshaped_activations_A = reshaped_activations_A.to('cuda')
-        reshaped_activations_B = reshaped_activations_B.to('cuda')
-        column_A = column_A.to('cuda')
-
-    # Calculate means and standard deviations
-    mean_A = column_A.mean()
-    std_A = column_A.std()
-
-    # Mask columns with zero standard deviation
-    std_B = reshaped_activations_A.std(dim=0)
-    valid_columns_mask = std_B != 0
-
-    # Compute correlations for valid columns
-    valid_reshaped_activations_A = reshaped_activations_A[:, valid_columns_mask]
-    mean_B = valid_reshaped_activations_A.mean(dim=0)
-    std_B = valid_reshaped_activations_A.std(dim=0)
-
-    covariance = ((valid_reshaped_activations_A - mean_B) * (column_A - mean_A).unsqueeze(1)).mean(dim=0)
-    correlations = covariance / (std_A * std_B)
-
-    # Fill correlations with -inf where columns were invalid
-    all_correlations = torch.full((reshaped_activations_A.shape[1],), float('-inf')).to(correlations.device)
-    all_correlations[valid_columns_mask] = correlations
-
-    # Get the indices of the top 10 columns in B with the highest correlations
-    top_10_indices = torch.topk(all_correlations, 1).indices.cpu().numpy()
-    top_10_correlations = all_correlations[top_10_indices].cpu().numpy()
-
-    return top_10_indices, top_10_correlations
-
 
 # In[ ]:
 
@@ -335,10 +303,46 @@ print(f'Highest correlations values: {highest_correlations_values}')
 # In[ ]:
 
 
+sum(highest_correlations_values) / len(highest_correlations_values)
+
+
+# In[ ]:
+
+
 highest_correlations_indices[:100]
 
 
-# ### save corrs
+# ## pair A with B
+
+# In[ ]:
+
+
+highest_correlations_indices_AB, highest_correlations_values_AB = find_all_highest_correlations(reshaped_activations_B, reshaped_activations_A)
+print(f'Highest correlations indices: {highest_correlations_indices_AB}')
+print(f'Highest correlations values: {highest_correlations_values_AB}')
+
+
+# In[ ]:
+
+
+sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+
+
+# In[ ]:
+
+
+highest_correlations_indices_AB[:100]
+
+
+# In[ ]:
+
+
+import matplotlib.pyplot as plt
+plt.hist(highest_correlations_values_AB)
+plt.show()
+
+
+# ## save corrs
 
 # In[ ]:
 
@@ -369,7 +373,9 @@ files.download('highest_correlations_values_v1.pkl')
 # !cp batch_tokens_anySamps_v1.pkl /content/drive/MyDrive/
 
 
-# # load model
+# # interpret paired features
+
+# ## load tokenizer
 
 # In[ ]:
 
@@ -390,15 +396,13 @@ decoded_string = tokenizer.decode([token_id])
 print(decoded_string)
 
 
-# # interpret paired features
-
 # ## load dataset tokens
 
 # In[ ]:
 
 
 import pickle
-file_path = '/content/drive/MyDrive/batch_tokens_anySamps_v1.pkl'
+file_path = '/content/drive/MyDrive/sae_files/batch_tokens_anySamps_v1.pkl'
 with open(file_path, 'rb') as f:
     batch_tokens = pickle.load(f)
 
@@ -492,6 +496,26 @@ for feature_idx_B, feature_idx_A in enumerate(highest_correlations_indices[:10])
     print('-'*50)
 
 
+# ### pair A with B
+
+# In[ ]:
+
+
+samp_m = 5 # get top samp_m tokens for all top feat_k feature neurons
+
+for feature_idx_A, feature_idx_B in enumerate(highest_correlations_indices_AB[:10]):
+    print(f'Correlation: {highest_correlations_values[feature_idx_B]}')
+    print('Model A Feature: ', feature_idx_A)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_model_A, feature_idx_A, samp_m, batch_tokens=batch_tokens)
+    display_top_sequences(ds_top_acts_indices, ds_top_acts_values, batch_tokens=batch_tokens)
+
+    print('Model B Feature: ', feature_idx_B)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_model_B, feature_idx_B, samp_m, batch_tokens=batch_tokens)
+    display_top_sequences(ds_top_acts_indices, ds_top_acts_values, batch_tokens=batch_tokens)
+
+    print('-'*50)
+
+
 # # search modB features with keyword, get modA f pair
 
 # ## fns
@@ -570,526 +594,6 @@ print(modB_feats)
 
 print(fList_model_A[0])
 print(fList_model_B[12])
-
-
-# # statically color points on 2 plots
-
-# ## umap
-
-# In[ ]:
-
-
-# import umap
-# import matplotlib.pyplot as plt
-# import pandas as pd
-# import plotly.express as px
-# import plotly.graph_objects as go
-# from plotly.subplots import make_subplots
-# import numpy as np
-
-# reducer = umap.UMAP(n_neighbors=15, min_dist=0.01, metric='euclidean')
-
-# # Fit and transform the data by rows
-# embedding1 = reducer.fit_transform(weight_matrix_np)
-# embedding2 = reducer.fit_transform(weight_matrix_2)
-
-
-# In[ ]:
-
-
-# with open('embedding1.pkl', 'wb') as f:
-#     pickle.dump(embedding1, f)
-# files.download('embedding1.pkl')
-
-# with open('embedding2.pkl', 'wb') as f:
-#     pickle.dump(embedding2, f)
-# files.download('embedding2.pkl')
-
-
-# ## load
-
-# In[ ]:
-
-
-import pickle
-with open('embedding_1L_16384.pkl', 'rb') as f:
-    embedding1 = pickle.load(f)
-with open('embedding_2L_16384.pkl', 'rb') as f:
-    embedding2 = pickle.load(f)
-
-
-# In[ ]:
-
-
-import umap
-import matplotlib.pyplot as plt
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import numpy as np
-
-# Create DataFrames for Plotly
-df1 = pd.DataFrame(embedding1, columns=['UMAP Component 1', 'UMAP Component 2'])
-df1['Feature ID'] = range(len(embedding1))
-df1['Feature Description'] = fList_model_A[:len(embedding1)]  # Adjust this if needed
-# df1['Color'] = ['yellow' if i in highest_correlations_indices_v1[0:16000] else 'blue' for i in df1['Feature ID']]
-df1['Color'] = ['red' if i in modA_feats else 'blue' for i in df1['Feature ID']]
-
-df2 = pd.DataFrame(embedding2, columns=['UMAP Component 1', 'UMAP Component 2'])
-df2['Feature ID'] = range(len(embedding2))
-df2['Feature Description'] = fList_model_B[:len(embedding2)]  # Adjust this if needed
-# df2['Color'] = ['yellow' if i in list(range(16000)) else 'red' for i in df2['Feature ID']]
-df2['Color'] = ['red' if i in modB_feats else 'blue' for i in df2['Feature ID']]
-
-# Create side by side plots using Plotly subplots
-fig = make_subplots(rows=1, cols=2, subplot_titles=('UMAP Projection of SAE 1', 'UMAP Projection of SAE 2'))
-
-# Add first scatter plot
-fig.add_trace(
-    go.Scatter(
-        x=df1['UMAP Component 1'], y=df1['UMAP Component 2'],
-        mode='markers', marker=dict(color=df1['Color']),
-        text=df1['Feature ID'], customdata=np.array(df1[['Feature Description']]),
-        hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-    ),
-    row=1, col=1
-)
-
-# Add second scatter plot
-fig.add_trace(
-    go.Scatter(
-        x=df2['UMAP Component 1'], y=df2['UMAP Component 2'],
-        mode='markers', marker=dict(color=df2['Color']),
-        text=df2['Feature ID'], customdata=np.array(df2[['Feature Description']]),
-        hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-    ),
-    row=1, col=2
-)
-
-# Update layout
-fig.update_layout(
-    title_text='UMAP Projections of Feature Decoder Weights',
-    xaxis_title='UMAP Component 1',
-    yaxis_title='UMAP Component 2',
-    showlegend=False
-)
-
-fig.show()
-
-
-# ## search and plot fn
-
-# In[ ]:
-
-
-import umap
-import matplotlib.pyplot as plt
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import numpy as np
-
-def keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1):
-    modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-
-    df1 = pd.DataFrame(embedding1, columns=['UMAP Component 1', 'UMAP Component 2'])
-    df1['Feature ID'] = range(len(embedding1))
-    df1['Feature Description'] = fList_model_A[:len(embedding1)]
-    df1['Color'] = ['red' if i in modA_feats else 'blue' for i in df1['Feature ID']]
-
-    df2 = pd.DataFrame(embedding2, columns=['UMAP Component 1', 'UMAP Component 2'])
-    df2['Feature ID'] = range(len(embedding2))
-    df2['Feature Description'] = fList_model_B[:len(embedding2)]
-    df2['Color'] = ['red' if i in modB_feats else 'blue' for i in df2['Feature ID']]
-
-    # Create side by side plots using Plotly subplots
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('UMAP Projection of SAE 1', 'UMAP Projection of SAE 2'))
-
-    # Add first scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=df1['UMAP Component 1'], y=df1['UMAP Component 2'],
-            mode='markers', marker=dict(color=df1['Color']),
-            text=df1['Feature ID'], customdata=np.array(df1[['Feature Description']]),
-            hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-        ),
-        row=1, col=1
-    )
-
-    # Add second scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=df2['UMAP Component 1'], y=df2['UMAP Component 2'],
-            mode='markers', marker=dict(color=df2['Color']),
-            text=df2['Feature ID'], customdata=np.array(df2[['Feature Description']]),
-            hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-        ),
-        row=1, col=2
-    )
-
-    # Update layout
-    fig.update_layout(
-        title_text='UMAP Projections of Feature Decoder Weights',
-        xaxis_title='UMAP Component 1',
-        yaxis_title='UMAP Component 2',
-        showlegend=False
-    )
-
-    fig.show()
-
-
-# In[ ]:
-
-
-keyword = "princess"
-keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1)
-
-
-# ## try other keywords
-
-# In[ ]:
-
-
-keyword = "let"
-keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1)
-
-
-# In[ ]:
-
-
-keyword = "saw"
-keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1)
-
-
-# In[ ]:
-
-
-keyword = "spot"
-keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1)
-
-
-# In[ ]:
-
-
-print(fList_model_A[0])
-print(fList_model_B[12])
-
-
-# In[ ]:
-
-
-keyword = "king"
-keyword_umaps(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1)
-
-
-# # save umap as html
-
-# In[ ]:
-
-
-import umap
-import matplotlib.pyplot as plt
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import numpy as np
-
-def keyword_umaps_html(keyword, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1, output_filename='umap_plot.html'):
-    """
-    keyword is a string for which points should be in red instead of blue
-    embedding1 is an array of (x,y) pts for scattterplot 1; WLOG for scatterplot 2
-        Each embedding has the same number of pts
-        Each pt is an SAE feature decoder weight vector embedded in 2D umap space
-        Each embedding is for an SAE feature decoder weight matrix
-    fList_model_A is a list of strings (labels) for every pt in embedding1
-        Each pt has a string of the top 5 tokens that the feature activates highest on
-        WLOG, fList_model_B is a list of strings for every pt in embedding2
-        when a point is hovered over, its ID and string of top 5 tokens is displayed
-    highest_correlations_indices_v1 is a list in which indices are point ids in scatter plot 2
-        and the values are the mapped indices in scatter plot 1
-        Eg) [5 3 0] : feature 0 in embedding2 is mapped to feature 5 in embedding1
-        This mapping means feature 0's highest correlated feature in embedding1 is feature 5
-        So given a set of tokens, these two features have the highest corr score
-    output_filename is the name of the html file to save the plot to
-
-    (vars within fn)
-    modB_feats: a list of features that contain the keyword in its string from fList_model_B
-        Eg) keyword is "Upon", and for feature 3, fList_model_A[3] = 'upon Upon king upon up'
-         Thus, we include 3 in modB_feats. If it didn't have 'upon', we don't include it.
-    modA_feats: the value in highest_correlations_indices_v1 for every ind in modB_feats
-        Eg) 3 is in modB_feats. highest_correlations_indices_v1[3] = 6, so 6 is in modA_feats
-
-    AIM: modify so hovering over a point in one scatterplot will create a hover box over another a
-        point in a second hover box, based on a list "highest_correlations_indices" in which indices
-        are point ids in scatter plot 2 and the values are the mapped indices in scatter plot 1.
-
-    """
-    modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-
-    df1 = pd.DataFrame(embedding1, columns=['UMAP Component 1', 'UMAP Component 2'])
-    df1['Feature ID'] = range(len(embedding1))
-    df1['Feature Description'] = fList_model_A[:len(embedding1)]
-    df1['Color'] = ['red' if i in modA_feats else 'blue' for i in df1['Feature ID']]
-
-    df2 = pd.DataFrame(embedding2, columns=['UMAP Component 1', 'UMAP Component 2'])
-    df2['Feature ID'] = range(len(embedding2))
-    df2['Feature Description'] = fList_model_B[:len(embedding2)]
-    df2['Color'] = ['red' if i in modB_feats else 'blue' for i in df2['Feature ID']]
-
-    # Create side by side plots using Plotly subplots
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('UMAP Projection of SAE 1', 'UMAP Projection of SAE 2'))
-
-    # Add first scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=df1['UMAP Component 1'], y=df1['UMAP Component 2'],
-            mode='markers', marker=dict(color=df1['Color']),
-            text=df1['Feature ID'], customdata=np.array(df1[['Feature Description']]),
-            hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-        ),
-        row=1, col=1
-    )
-
-    # Add second scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=df2['UMAP Component 1'], y=df2['UMAP Component 2'],
-            mode='markers', marker=dict(color=df2['Color']),
-            text=df2['Feature ID'], customdata=np.array(df2[['Feature Description']]),
-            hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-        ),
-        row=1, col=2
-    )
-
-    # Update layout
-    fig.update_layout(
-        title_text='UMAP Projections of Feature Decoder Weights',
-        xaxis_title='UMAP Component 1',
-        yaxis_title='UMAP Component 2',
-        showlegend=False
-    )
-
-    # Save the figure as an HTML file
-    fig.write_html(output_filename)
-
-    print(f"Plot saved as {output_filename}")
-
-
-# In[ ]:
-
-
-keyword = "once"
-outputFN = 'ts_1L_2L_MLP0_16k_30k_relu.html'
-keyword_umaps_html(keyword, embedding1, embedding2, fList_model_A, fList_model_B,
-                   highest_correlations_indices_v1, output_filename = outputFN)
-files.download(outputFN)
-
-
-# In[ ]:
-
-
-keyword = "upon"
-outputFN = 'ts_1L_2L_MLP0_16k_30k_relu.html'
-keyword_umaps_html(keyword, embedding1, embedding2, fList_model_A, fList_model_B,
-                   highest_correlations_indices_v1, output_filename = outputFN)
-files.download(outputFN)
-
-
-# ## color two keywords
-
-# In[ ]:
-
-
-import umap
-import matplotlib.pyplot as plt
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import numpy as np
-from google.colab import files
-
-def keyword_umaps_html_2(keyword, kw2, embedding1, embedding2, fList_model_A, fList_model_B, highest_correlations_indices_v1, output_filename='umap_plot.html'):
-    """
-    keyword is a string for which points should be in red instead of blue
-    embedding1 is an array of (x,y) pts for scattterplot 1; WLOG for scatterplot 2
-        Each embedding has the same number of pts
-        Each pt is an SAE feature decoder weight vector embedded in 2D umap space
-        Each embedding is for an SAE feature decoder weight matrix
-    fList_model_A is a list of strings (labels) for every pt in embedding1
-        Each pt has a string of the top 5 tokens that the feature activates highest on
-        WLOG, fList_model_B is a list of strings for every pt in embedding2
-        when a point is hovered over, its ID and string of top 5 tokens is displayed
-    highest_correlations_indices_v1 is a list in which indices are point ids in scatter plot 2
-        and the values are the mapped indices in scatter plot 1
-        Eg) [5 3 0] : feature 0 in embedding2 is mapped to feature 5 in embedding1
-        This mapping means feature 0's highest correlated feature in embedding1 is feature 5
-        So given a set of tokens, these two features have the highest corr score
-    output_filename is the name of the html file to save the plot to
-
-    (vars within fn)
-    modB_feats: a list of features that contain the keyword in its string from fList_model_B
-        Eg) keyword is "Upon", and for feature 3, fList_model_A[3] = 'upon Upon king upon up'
-         Thus, we include 3 in modB_feats. If it didn't have 'upon', we don't include it.
-    modA_feats: the value in highest_correlations_indices_v1 for every ind in modB_feats
-        Eg) 3 is in modB_feats. highest_correlations_indices_v1[3] = 6, so 6 is in modA_feats
-
-    AIM: modify so hovering over a point in one scatterplot will create a hover box over another a
-        point in a second hover box, based on a list "highest_correlations_indices" in which indices
-        are point ids in scatter plot 2 and the values are the mapped indices in scatter plot 1.
-
-    """
-    modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    modB_feats_2 = find_indices_with_keyword(fList_model_B, kw2)
-    modA_feats_2 = get_values_from_indices(modB_feats_2, highest_correlations_indices_v1)
-
-    df1 = pd.DataFrame(embedding1, columns=['UMAP Component 1', 'UMAP Component 2'])
-    df1['Feature ID'] = range(len(embedding1))
-    df1['Feature Description'] = fList_model_A[:len(embedding1)]
-    df1['Color'] = [
-        'red' if i in modA_feats else 'green' if i in modA_feats_2 else 'blue'
-        for i in df1['Feature ID']
-    ]
-
-    df2 = pd.DataFrame(embedding2, columns=['UMAP Component 1', 'UMAP Component 2'])
-    df2['Feature ID'] = range(len(embedding2))
-    df2['Feature Description'] = fList_model_B[:len(embedding2)]
-    df2['Color'] = [
-        'red' if i in modB_feats else 'green' if i in modB_feats_2 else 'blue'
-        for i in df2['Feature ID']
-    ]
-
-    # Create side by side plots using Plotly subplots
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('UMAP Projection of SAE 1', 'UMAP Projection of SAE 2'))
-
-    # Add first scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=df1['UMAP Component 1'], y=df1['UMAP Component 2'],
-            mode='markers', marker=dict(color=df1['Color']),
-            text=df1['Feature ID'], customdata=np.array(df1[['Feature Description']]),
-            hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-        ),
-        row=1, col=1
-    )
-
-    # Add second scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=df2['UMAP Component 1'], y=df2['UMAP Component 2'],
-            mode='markers', marker=dict(color=df2['Color']),
-            text=df2['Feature ID'], customdata=np.array(df2[['Feature Description']]),
-            hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-        ),
-        row=1, col=2
-    )
-
-    # Update layout
-    fig.update_layout(
-        title_text='UMAP Projections of Feature Decoder Weights',
-        xaxis_title='UMAP Component 1',
-        yaxis_title='UMAP Component 2',
-        showlegend=False
-    )
-
-    # Save the figure as an HTML file
-    fig.write_html(output_filename)
-
-    print(f"Plot saved as {output_filename}")
-
-
-# In[ ]:
-
-
-keyword = "once"
-kw2 = "upon"
-outputFN = 'ts_1L_2L_MLP0_16k_30k_relu_v2.html'
-keyword_umaps_html_2(keyword, kw2, embedding1, embedding2, fList_model_A, fList_model_B,
-                   highest_correlations_indices_v1, output_filename = outputFN)
-files.download(outputFN)
-
-
-# ## try hover sync both subplots
-
-# In[ ]:
-
-
-modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-
-df1 = pd.DataFrame(embedding1, columns=['UMAP Component 1', 'UMAP Component 2'])
-df1['Feature ID'] = range(len(embedding1))
-df1['Feature Description'] = fList_model_A[:len(embedding1)]
-df1['Color'] = ['red' if i in modA_feats else 'blue' for i in df1['Feature ID']]
-df1['Correlated ID'] = highest_correlations_indices_v1[:len(embedding1)]
-
-df2 = pd.DataFrame(embedding2, columns=['UMAP Component 1', 'UMAP Component 2'])
-df2['Feature ID'] = range(len(embedding2))
-df2['Feature Description'] = fList_model_B[:len(embedding2)]
-df2['Color'] = ['red' if i in modB_feats else 'blue' for i in df2['Feature ID']]
-df2['Correlated ID'] = [i for i in range(len(embedding2))]
-
-# Create side by side plots using Plotly subplots
-fig = make_subplots(rows=1, cols=2, subplot_titles=('UMAP Projection of SAE 1', 'UMAP Projection of SAE 2'))
-
-# Add first scatter plot
-fig.add_trace(
-    go.Scatter(
-        x=df1['UMAP Component 1'], y=df1['UMAP Component 2'],
-        mode='markers', marker=dict(color=df1['Color']),
-        text=df1['Feature ID'], customdata=np.array(df1[['Feature Description', 'Correlated ID']]),
-        hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-    ),
-    row=1, col=1
-)
-
-# Add second scatter plot
-fig.add_trace(
-    go.Scatter(
-        x=df2['UMAP Component 1'], y=df2['UMAP Component 2'],
-        mode='markers', marker=dict(color=df2['Color']),
-        text=df2['Feature ID'], customdata=np.array(df2[['Feature Description', 'Correlated ID']]),
-        hovertemplate='<b>Feature ID:</b> %{text}<br><b>Description:</b> %{customdata[0]}'
-    ),
-    row=1, col=2
-)
-
-# Update layout
-fig.update_layout(
-    title_text='UMAP Projections of Feature Decoder Weights',
-    showlegend=False
-)
-
-# Save the figure as an HTML file
-fig.write_html(outputFN)
-
-
-# In[ ]:
-
-
-fig.data[0].to_plotly_json()
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-keyword = "once"
-outputFN = 'ts_1L_2L_MLP0_16k_30k_relu.html'
-keyword_umaps_html(keyword, embedding1, embedding2, fList_model_A, fList_model_B,
-                   highest_correlations_indices_v1, output_filename = outputFN)
-files.download(outputFN)
 
 
 # # jaccard on feature subset
@@ -1266,35 +770,307 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
 # In[ ]:
 
 
+weight_matrix_np.shape
+
+
+# In[ ]:
+
+
+weight_matrix_2.shape
+
+
+# In[ ]:
+
+
+len(highest_correlations_indices)
+
+
+# In[ ]:
+
+
+len(list(set(highest_correlations_indices)))
+
+
+# In[ ]:
+
+
 jaccard_similarity(weight_matrix_np, weight_matrix_2)
 
 
 # In[ ]:
 
 
-jaccard_similarity(weight_matrix_np[highest_correlations_indices_v1], weight_matrix_2)
+jaccard_similarity(weight_matrix_np[highest_correlations_indices, :], weight_matrix_2[:16384, :])
+
+
+# ## pair A with B
+
+# In[ ]:
+
+
+len(list(set(highest_correlations_indices_AB)))
 
 
 # In[ ]:
 
 
-weight_matrix_2.shape[0]
+jaccard_similarity(weight_matrix_np, weight_matrix_2[highest_correlations_indices_AB])
+
+
+# ## 1-1 only
+
+# In[ ]:
+
+
+# highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals
+
+uniq_corr_indices_AB_forB = []
+uniq_corr_indices_AB_forA = []
+for ind_A, ind_B in enumerate(highest_correlations_indices_AB):
+    if ind_B not in uniq_corr_indices_AB_forB:
+        uniq_corr_indices_AB_forA.append(ind_A)
+        uniq_corr_indices_AB_forB.append(ind_B)
 
 
 # In[ ]:
 
 
-len(list(set(highest_correlations_indices_v1)))
+len(uniq_corr_indices_AB_forA)
 
 
-# ## single token subspaces
+# In[ ]:
+
+
+# unpaired
+jaccard_similarity(weight_matrix_np[:2405], weight_matrix_2[:2405])
+
+
+# In[ ]:
+
+
+jaccard_similarity(weight_matrix_np[uniq_corr_indices_AB_forA], weight_matrix_2[uniq_corr_indices_AB_forB])
+
+
+# In[ ]:
+
+
+all_rand_scores = []
+num_feats = len(uniq_corr_indices_AB_forA)
+for i in range(10):
+    rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=num_feats).tolist()
+    rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=num_feats).tolist()
+
+    score = jaccard_similarity(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
+    all_rand_scores.append(score)
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# In[ ]:
+
+
+plt.hist(all_rand_scores)
+plt.show()
+
+
+# ## remove all corr feats less than 0.5
+
+# In[ ]:
+
+
+new_highest_correlations_indices_AB_A = []
+new_highest_correlations_indices_AB = []
+new_highest_correlations_values_AB = []
+
+ind_A = 0
+for ind_B, val in zip(highest_correlations_indices_AB, highest_correlations_values_AB):
+    if val > 0.5:
+        new_highest_correlations_indices_AB_A.append(ind_A)
+        new_highest_correlations_indices_AB.append(ind_B)
+        new_highest_correlations_values_AB.append(val)
+    ind_A += 1
+
+
+# In[ ]:
+
+
+len(new_highest_correlations_values_AB)
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB_A)))
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB)))
+
+
+# In[ ]:
+
+
+weight_matrix_np[new_highest_correlations_indices_AB_A, :].shape
+
+
+# In[ ]:
+
+
+# unpaired
+jaccard_similarity(weight_matrix_np[:len(new_highest_correlations_indices_AB_A), :], weight_matrix_2[:len(new_highest_correlations_indices_AB_A), :])
+
+
+# In[ ]:
+
+
+jaccard_similarity(weight_matrix_np[new_highest_correlations_indices_AB_A, :], weight_matrix_2[new_highest_correlations_indices_AB, :])
+
+
+# ## remove all corr feats less than 0.7
+
+# In[ ]:
+
+
+new_highest_correlations_indices_AB_A = []
+new_highest_correlations_indices_AB = []
+new_highest_correlations_values_AB = []
+
+ind_A = 0
+for ind_B, val in zip(highest_correlations_indices_AB, highest_correlations_values_AB):
+    if val > 0.7:
+        new_highest_correlations_indices_AB_A.append(ind_A)
+        new_highest_correlations_indices_AB.append(ind_B)
+        new_highest_correlations_values_AB.append(val)
+    ind_A += 1
+
+
+# In[ ]:
+
+
+len(new_highest_correlations_values_AB)
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB_A)))
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB)))
+
+
+# In[ ]:
+
+
+weight_matrix_np[new_highest_correlations_indices_AB_A, :].shape
+
+
+# In[ ]:
+
+
+# unpaired
+jaccard_similarity(weight_matrix_np[:len(new_highest_correlations_indices_AB_A), :], weight_matrix_2[:len(new_highest_correlations_indices_AB_A), :], k =10)
+
+
+# In[ ]:
+
+
+jaccard_similarity(weight_matrix_np[new_highest_correlations_indices_AB_A, :], weight_matrix_2[new_highest_correlations_indices_AB, :], k=10)
+
+
+# In[ ]:
+
+
+# unpaired
+jaccard_similarity(weight_matrix_np[:len(new_highest_correlations_indices_AB_A), :], weight_matrix_2[:len(new_highest_correlations_indices_AB_A), :], k =4)
+
+
+# In[ ]:
+
+
+jaccard_similarity(weight_matrix_np[new_highest_correlations_indices_AB_A, :], weight_matrix_2[new_highest_correlations_indices_AB, :], k=4)
+
+
+# ## remove all corr feats less than 0.9
+
+# In[ ]:
+
+
+new_highest_correlations_indices_AB_A = []
+new_highest_correlations_indices_AB = []
+new_highest_correlations_values_AB = []
+
+ind_A = 0
+for ind_B, val in zip(highest_correlations_indices_AB, highest_correlations_values_AB):
+    if val > 0.9:
+        new_highest_correlations_indices_AB_A.append(ind_A)
+        new_highest_correlations_indices_AB.append(ind_B)
+        new_highest_correlations_values_AB.append(val)
+    ind_A += 1
+
+
+# In[ ]:
+
+
+len(new_highest_correlations_values_AB)
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB_A)))
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB)))
+
+
+# In[ ]:
+
+
+weight_matrix_np[new_highest_correlations_indices_AB_A, :].shape
+
+
+# In[ ]:
+
+
+# unpaired
+jaccard_similarity(weight_matrix_np[:len(new_highest_correlations_indices_AB_A), :], weight_matrix_2[:len(new_highest_correlations_indices_AB_A), :], k =10)
+
+
+# In[ ]:
+
+
+jaccard_similarity(weight_matrix_np[new_highest_correlations_indices_AB_A, :], weight_matrix_2[new_highest_correlations_indices_AB, :], k=10)
+
+
+# In[ ]:
+
+
+# unpaired
+jaccard_similarity(weight_matrix_np[:len(new_highest_correlations_indices_AB_A), :], weight_matrix_2[:len(new_highest_correlations_indices_AB_A), :], k =4)
+
+
+# In[ ]:
+
+
+jaccard_similarity(weight_matrix_np[new_highest_correlations_indices_AB_A, :], weight_matrix_2[new_highest_correlations_indices_AB, :], k=4)
+
+
+# # single token subspaces
 
 # In[ ]:
 
 
 def get_rand_scores(modA_feats, modB_feats, k: int = 10):
     total_scores = 0
-    for i in range(100):
+    for i in range(10):
         # if i % 20 == 0:
         #     print(i)
         rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=len(modA_feats)).tolist()
@@ -1304,7 +1080,7 @@ def get_rand_scores(modA_feats, modB_feats, k: int = 10):
 
         total_scores += jaccard_similarity(X_subset, Y_subset, k)
 
-    return total_scores / 100
+    return total_scores / 10
 
 
 # In[ ]:
@@ -1357,221 +1133,6 @@ Y_subset = weight_matrix_2[modB_feats, :]
 print(len(X_subset))
 print(jaccard_similarity(X_subset, Y_subset, k=4))
 print(get_rand_scores(modA_feats, modB_feats, k=4))
-
-
-# ## multiple token subspaces
-
-# In[ ]:
-
-
-keyword_1 = "she"
-keyword_2 = "princess"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "she"
-keyword_2 = "he"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "princess"
-keyword_2 = "dragon"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "princess"
-keyword_2 = "dragon"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset, k = 3))
-print(get_rand_scores(modA_feats, modB_feats, k =3))
-
-
-# In[ ]:
-
-
-keyword_1 = "once"
-keyword_2 = "upon"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "once"
-keyword_2 = "upon"
-keyword_3 = "time"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2) + \
-                find_indices_with_keyword(fList_model_B, keyword_3)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "once"
-keyword_2 = "she"
-keyword_3 = "."
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2) + \
-                find_indices_with_keyword(fList_model_B, keyword_3)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "time"
-keyword_2 = "she"
-keyword_3 = "."
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2) + \
-                find_indices_with_keyword(fList_model_B, keyword_3)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "time"
-keyword_2 = "she"
-keyword_3 = "let"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2) + \
-                find_indices_with_keyword(fList_model_B, keyword_3)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "time"
-keyword_2 = "she"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword_1 = "once"
-keyword_2 = "she"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword_1) + find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# ## compare feats from diff clusters to check
-
-# In[ ]:
-
-
-keyword_1 = "time"
-modB_feats_1 = find_indices_with_keyword(fList_model_B, keyword_1)
-len(modB_feats_1)
-
-
-# In[ ]:
-
-
-keyword_2 = "she"
-modB_feats_2 = find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats_2 = get_values_from_indices(modB_feats_2, highest_correlations_indices_v1)
-len(modA_feats_2)
-
-
-# In[ ]:
-
-
-minInd = min(len(modB_feats_1), len(modA_feats_2))
-X_subset = weight_matrix_np[modA_feats_2[:minInd], :]
-Y_subset = weight_matrix_2[modB_feats_1[:minInd], :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset))
-
-
-# ### more exmaples
-
-# In[ ]:
-
-
-keyword_1 = "once"
-modB_feats_1 = find_indices_with_keyword(fList_model_B, keyword_1)
-len(modB_feats_1)
-
-keyword_2 = "he"
-modB_feats_2 = find_indices_with_keyword(fList_model_B, keyword_2)
-modA_feats_2 = get_values_from_indices(modB_feats_2, highest_correlations_indices_v1)
-len(modA_feats_2)
-
-minInd = min(len(modB_feats_1), len(modA_feats_2))
-X_subset = weight_matrix_np[modA_feats_2[:minInd], :]
-Y_subset = weight_matrix_2[modB_feats_1[:minInd], :]
-print(len(X_subset))
-print(jaccard_similarity(X_subset, Y_subset, k=4))
-# print(get_rand_scores(modA_feats, modB_feats))
 
 
 # ## corr explora
@@ -1668,403 +1229,6 @@ Y_subset = weight_matrix_2[rand_modB_feats, :]
 
 # Update total_scores with the Jaccard similarity between the subsets
 jaccard_similarity(X_subset, Y_subset, k=3)
-
-
-# ## jaccard explora
-
-# In[ ]:
-
-
-
-
-
-# ## sel one from each category
-
-# This prob won't succeed at first so you need to refine this.
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
-
-for kw in keywords:
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-jaccard_similarity(X_subset, Y_subset, k=3)
-
-
-# In[ ]:
-
-
-len(mixed_modA_feats)
-
-
-# In[ ]:
-
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
-
-for kw in keywords:
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.extend(modA_feats[0:2])
-    mixed_modB_feats.extend(modB_feats[0:2])
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=3))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
-
-for kw in keywords:
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.extend(modA_feats[0:5])
-    mixed_modB_feats.extend(modB_feats[0:5])
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=3))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", "."]
-
-for kw in keywords:
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.extend(modA_feats[0:5])
-    mixed_modB_feats.extend(modB_feats[0:5])
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=10))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=10))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["once", "upon", "a", "time", "let", "she", "he", "princess", "dragon", "king", ".", "family"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=3))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["once", "upon", "a", "time"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=2))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "princess", "dragon"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=2))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "princess", "dragon", "she", "he"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=2))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=2))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he", "her", "his", "it"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=2))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time", "let", "."]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=2))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=2))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time", "let", "."]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=3))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=3))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time", "let", "."]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=4))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=4))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time", "let", "."]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=5))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=5))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time", "let"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=4))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=4))
-
-
-# In[ ]:
-
-
-mixed_modA_feats = []
-mixed_modB_feats = []
-
-keywords = ["girl", "boy", "she", "he", "her", "his", "it", "once", "upon", "a", "time"]
-
-for kw in keywords:
-    print(kw + ": ")
-    modB_feats = find_indices_with_keyword(fList_model_B, kw)
-    modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-    mixed_modA_feats.append(modA_feats[0])
-    mixed_modB_feats.append(modB_feats[0])
-    print(len(modB_feats), len(list(set(modA_feats))))
-
-X_subset = weight_matrix_np[mixed_modA_feats, :]
-Y_subset = weight_matrix_2[mixed_modB_feats, :]
-print(len(mixed_modA_feats))
-print(jaccard_similarity(X_subset, Y_subset, k=4))
-
-print(get_rand_scores(mixed_modA_feats, mixed_modB_feats, k=4))
 
 
 # ## see what feat neighs they have in common
@@ -2214,73 +1378,6 @@ print(get_rand_scores(new_modA_feats, new_modB_feats))
 
 # # jaccard on token actvs
 
-# ## fns
-
-# In[ ]:
-
-
-from typing import List, Set, Union
-
-import numpy as np
-import numpy.typing as npt
-import sklearn.neighbors
-import torch
-
-# from llmcomp.measures.utils import to_numpy_if_needed
-
-
-def _jac_sim_i(idx_R: Set[int], idx_Rp: Set[int]) -> float:
-    return len(idx_R.intersection(idx_Rp)) / len(idx_R.union(idx_Rp))
-
-
-def jaccard_similarity(
-    R: Union[torch.Tensor, npt.NDArray],
-    Rp: Union[torch.Tensor, npt.NDArray],
-    k: int = 10,
-    inner: str = "cosine",
-    n_jobs: int = 8,
-) -> float:
-    R, Rp = to_numpy_if_needed(R, Rp)
-
-    indices_R = nn_array_to_setlist(top_k_neighbors(R, k, inner, n_jobs))
-    indices_Rp = nn_array_to_setlist(top_k_neighbors(Rp, k, inner, n_jobs))
-
-    # all_scores = []
-    # for i, idx_R, idx_Rp in enumerate(zip(indices_R, indices_Rp)):
-    #     if i % 1000 == 0:
-    #         print(idx_R, idx_Rp)
-    #     score = _jac_sim_i(idx_R, idx_Rp)
-    #     all_scores.append(score)
-    # return float(np.mean(all_scores))
-
-    return float(
-        np.mean(
-            [_jac_sim_i(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indices_Rp)]
-        )
-    )
-
-
-def top_k_neighbors(
-    R: npt.NDArray,
-    k: int,
-    inner: str,
-    n_jobs: int,
-) -> npt.NDArray:
-    # k+1 nearest neighbors, because we pass in all the data, which means that a point
-    # will be the nearest neighbor to itself. We remove this point from the results and
-    # report only the k nearest neighbors distinct from the point itself.
-    nns = sklearn.neighbors.NearestNeighbors(
-        n_neighbors=k + 1, metric=inner, n_jobs=n_jobs
-    )
-    nns.fit(R)
-    _, nns = nns.kneighbors(R)
-    return nns[:, 1:]
-
-
-def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
-    return [set(idx) for idx in nn]
-
-
 # ## test
 
 # In[ ]:
@@ -2292,9 +1389,13 @@ reshaped_activations_A.shape
 # In[ ]:
 
 
-# jaccard_similarity(reshaped_activations_A, reshaped_activations_B)
+reshaped_activations_B.shape
 
-jaccard_similarity(reshaped_activations_A[:10000, :], reshaped_activations_B[:10000, :])
+
+# In[ ]:
+
+
+jaccard_similarity(reshaped_activations_A, reshaped_activations_B)
 
 
 # In[ ]:
@@ -2335,13 +1436,26 @@ jaccard_similarity(reshaped_activations_A[row_idxs, :], reshaped_activations_B)
 # In[ ]:
 
 
+reshaped_activations_A.t().shape
+
+
+# In[ ]:
+
+
+# ignore this; the sample size is too small relative to k=10
 jaccard_similarity(reshaped_activations_A[:1000, :].t(), reshaped_activations_B[:1000, :].t())
 
 
 # In[ ]:
 
 
-jaccard_similarity(reshaped_activations_A[:1000, :].t()[highest_correlations_indices_v1], reshaped_activations_B[:1000, :].t())
+jaccard_similarity(reshaped_activations_A.t(), reshaped_activations_B.t())
+
+
+# In[ ]:
+
+
+jaccard_similarity(reshaped_activations_A.t(), reshaped_activations_B.t()[highest_correlations_indices_AB])
 
 
 # In[ ]:
@@ -2372,7 +1486,7 @@ jaccard_similarity(reshaped_activations_A[:, :].t()[highest_correlations_indices
 
 # ## fn
 
-# In[10]:
+# In[ ]:
 
 
 import functools
@@ -2699,7 +1813,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[11]:
+# In[ ]:
 
 
 import scipy.optimize
@@ -2837,20 +1951,20 @@ class RSA(RSMSimilarityMeasure):
 # In[ ]:
 
 
-representational_similarity_analysis(weight_matrix_np, weight_matrix_2, "nd")
+representational_similarity_analysis(weight_matrix_np, weight_matrix_2[:16384, :], "nd")
 
 
 # In[ ]:
 
 
-representational_similarity_analysis(weight_matrix_np[highest_correlations_indices_v1], weight_matrix_2, "nd")
+representational_similarity_analysis(weight_matrix_np, weight_matrix_2[highest_correlations_indices_AB], "nd")
 
 
 # # cca
 
 # ## fns
 
-# In[12]:
+# In[ ]:
 
 
 ##################################################################################
@@ -3446,34 +2560,117 @@ class PWCCA(RepresentationalSimilarityMeasure):
 # In[ ]:
 
 
-svcca(weight_matrix_np, weight_matrix_2, "nd")
+svcca(weight_matrix_np[:16384, :], weight_matrix_2[:16384, :], "nd")
 
 
 # In[ ]:
 
 
-svcca(weight_matrix_np[highest_correlations_indices_v1], weight_matrix_2, "nd")
+svcca(weight_matrix_np, weight_matrix_2[highest_correlations_indices_AB, :], "nd")
+
+
+# ## rand
+
+# In[ ]:
+
+
+all_rand_scores = []
+num_feats = len(highest_correlations_indices_AB)
+for i in range(10):
+    rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=num_feats).tolist()
+    rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=num_feats).tolist()
+
+    score = svcca(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
+    all_rand_scores.append(score)
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# In[ ]:
+
+
+plt.hist(all_rand_scores)
+plt.show()
+
+
+# In[ ]:
+
+
+all_rand_scores = []
+num_feats = weight_matrix_np.shape[0]
+for i in range(5):
+    rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=num_feats).tolist()
+    rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=num_feats).tolist()
+
+    score = svcca(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
+    all_rand_scores.append(score)
+print(sum(all_rand_scores) / len(all_rand_scores))
+
+plt.hist(all_rand_scores)
+plt.show()
+
+
+# In[ ]:
+
+
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# ## remove all corr feats less than 0.9
+
+# In[ ]:
+
+
+new_highest_correlations_indices_AB_A = []
+new_highest_correlations_indices_AB = []
+new_highest_correlations_values_AB = []
+
+ind_A = 0
+for ind_B, val in zip(highest_correlations_indices_AB, highest_correlations_values_AB):
+    if val > 0.9:
+        new_highest_correlations_indices_AB_A.append(ind_A)
+        new_highest_correlations_indices_AB.append(ind_B)
+        new_highest_correlations_values_AB.append(val)
+    ind_A += 1
+
+
+# In[ ]:
+
+
+len(new_highest_correlations_values_AB)
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB_A)))
+
+
+# In[ ]:
+
+
+len(list(set(new_highest_correlations_indices_AB)))
+
+
+# In[ ]:
+
+
+weight_matrix_np[new_highest_correlations_indices_AB_A, :].shape
+
+
+# In[ ]:
+
+
+# unpaired
+svcca(weight_matrix_np[:len(new_highest_correlations_indices_AB_A)], weight_matrix_2[:len(new_highest_correlations_indices_AB_A)], "nd")
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[:len(new_highest_correlations_indices_AB_A)], weight_matrix_2[new_highest_correlations_indices_AB, :], "nd")
 
 
 # ## single token subspaces
-
-# In[ ]:
-
-
-def get_rand_scores(modA_feats, modB_feats):
-    total_scores = 0
-    for i in range(100):
-        # if i % 20 == 0:
-        #     print(i)
-        rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=len(modA_feats)).tolist()
-        rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=len(modB_feats)).tolist()
-        X_subset = weight_matrix_np[rand_modA_feats, :]
-        Y_subset = weight_matrix_2[rand_modB_feats, :]
-
-        total_scores += svcca(X_subset, Y_subset, "nd")
-
-    return total_scores / 100
-
 
 # In[ ]:
 
@@ -3529,7 +2726,7 @@ print(get_rand_scores(modA_feats, modB_feats))
 
 # ## on token actvs
 
-# In[13]:
+# In[ ]:
 
 
 svcca(reshaped_activations_A[:10000, :], reshaped_activations_B[:10000, :], "nd")
@@ -3539,255 +2736,4 @@ svcca(reshaped_activations_A[:10000, :], reshaped_activations_B[:10000, :], "nd"
 
 
 svcca(reshaped_activations_A, reshaped_activations_B, "nd")
-
-
-# # cka
-
-# ## fns
-
-# In[ ]:
-
-
-from typing import Union
-
-import numpy.typing as npt
-import torch
-# from repsim.measures.utils import flatten
-# from repsim.measures.utils import RepresentationalSimilarityMeasure
-# from repsim.measures.utils import SHAPE_TYPE
-# from repsim.measures.utils import to_torch_if_needed
-
-
-def centered_kernel_alignment(
-    R: Union[torch.Tensor, npt.NDArray],
-    Rp: Union[torch.Tensor, npt.NDArray],
-    shape: SHAPE_TYPE,
-) -> float:
-    """Kornblith et al. (2019)"""
-    R, Rp = flatten(R, Rp, shape=shape)
-    R, Rp = to_torch_if_needed(R, Rp)
-    N, D = R.size()
-
-    R = R - R.mean(dim=0)[None, :]
-    Rp = Rp - Rp.mean(dim=0)[None, :]
-
-    if N < D:
-        S = R @ R.T
-        Sp = Rp @ Rp.T  # noqa: E741
-        return (hsic(S, Sp) / torch.sqrt(hsic(S, S) * hsic(Sp, Sp))).item()
-    else:
-        return (
-            torch.linalg.norm(Rp.T @ R, ord="fro") ** 2
-            / (torch.linalg.norm(R.T @ R, ord="fro") * torch.linalg.norm(Rp.T @ Rp, ord="fro"))
-        ).item()
-
-
-def hsic(S: torch.Tensor, Sp: torch.Tensor) -> torch.Tensor:  # noqa: E741
-    S = S - S.mean(dim=0)[:, None]
-    Sp = Sp - Sp.mean(dim=0)[:, None]  # noqa: E741
-    return torch.trace(S @ Sp) / (S.size(0) - 1) ** 2
-
-
-class CKA(RepresentationalSimilarityMeasure):
-    def __init__(self):
-        super().__init__(
-            sim_func=centered_kernel_alignment,
-            larger_is_more_similar=True,
-            is_metric=False,
-            is_symmetric=True,
-            invariant_to_affine=False,
-            invariant_to_invertible_linear=False,
-            invariant_to_ortho=True,
-            invariant_to_permutation=True,
-            invariant_to_isotropic_scaling=True,
-            invariant_to_translation=True,
-        )
-
-
-# ## all decoder weights
-
-# fast
-
-# In[ ]:
-
-
-centered_kernel_alignment(weight_matrix_np, weight_matrix_2, "nd")
-
-
-# In[ ]:
-
-
-centered_kernel_alignment(weight_matrix_np[highest_correlations_indices_v1], weight_matrix_2, "nd")
-
-
-# ## single token subspaces
-
-# In[ ]:
-
-
-def get_rand_scores(modA_feats, modB_feats):
-    total_scores = 0
-    for i in range(100):
-        # if i % 20 == 0:
-        #     print(i)
-        rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=len(modA_feats)).tolist()
-        rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=len(modB_feats)).tolist()
-        X_subset = weight_matrix_np[rand_modA_feats, :]
-        Y_subset = weight_matrix_2[rand_modB_feats, :]
-
-        total_scores += centered_kernel_alignment(X_subset, Y_subset, "nd")
-
-    return total_scores / 100
-
-
-# In[ ]:
-
-
-keyword = "upon"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(svcca(X_subset, Y_subset, "nd"))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword = "once"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(svcca(X_subset, Y_subset, "nd"))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword = "she"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(svcca(X_subset, Y_subset, "nd"))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# In[ ]:
-
-
-keyword = "let"
-modB_feats = find_indices_with_keyword(fList_model_B, keyword)
-modA_feats = get_values_from_indices(modB_feats, highest_correlations_indices_v1)
-X_subset = weight_matrix_np[modA_feats, :]
-Y_subset = weight_matrix_2[modB_feats, :]
-print(len(X_subset))
-print(svcca(X_subset, Y_subset, "nd"))
-print(get_rand_scores(modA_feats, modB_feats))
-
-
-# # weight cosine sim vs actv corr
-
-# ## fn
-
-# In[ ]:
-
-
-import numpy as np
-
-def find_all_highest_cosine_similarities(reshaped_activations_A, reshaped_activations_B):
-    # Normalize rows of A (each vector) for cosine similarity
-    norms_A = np.linalg.norm(reshaped_activations_A, axis=1, keepdims=True)
-    normalized_A = reshaped_activations_A / (norms_A + 1e-8)  # Avoid division by zero
-
-    # Normalize rows of B (each vector) for cosine similarity
-    norms_B = np.linalg.norm(reshaped_activations_B, axis=1, keepdims=True)
-    normalized_B = reshaped_activations_B / (norms_B + 1e-8)  # Avoid division by zero
-
-    # Compute cosine similarity matrix
-    cosine_similarity_matrix = np.dot(normalized_A, normalized_B.T)
-
-    # Get the highest cosine similarity indices and values
-    highest_cosine_values = np.max(cosine_similarity_matrix, axis=1)
-    highest_cosine_indices = np.argmax(cosine_similarity_matrix, axis=1)
-
-    return highest_cosine_indices, highest_cosine_values
-
-
-# In[ ]:
-
-
-highest_cosine_indices, highest_cosine_values = find_all_highest_cosine_similarities(weight_matrix_np, weight_matrix_2)
-
-
-# In[ ]:
-
-
-len(highest_cosine_indices)
-
-
-# In[ ]:
-
-
-import torch
-learned_norm = torch.nn.functional.normalize(torch.from_numpy(weight_matrix_np), p=2, dim=0)
-ground_truth_norm = torch.nn.functional.normalize(torch.from_numpy(weight_matrix_2), p=2, dim=0)
-cos_sims = torch.matmul(learned_norm, ground_truth_norm.t())
-highest_cosine_values_v2, highest_cosine_indices_v2 = cos_sims.max(dim=0)
-
-
-# In[ ]:
-
-
-highest_cosine_indices_v2.shape
-
-
-# In[ ]:
-
-
-highest_cosine_indices_v2 = highest_cosine_indices_v2.cpu().numpy()
-
-
-# ## metrics on cos sim paired
-
-# In[ ]:
-
-
-jaccard_similarity(weight_matrix_np[highest_cosine_indices], weight_matrix_2)
-
-
-# In[ ]:
-
-
-jaccard_similarity(weight_matrix_np[highest_cosine_indices_v2], weight_matrix_2)
-
-
-# In[ ]:
-
-
-centered_kernel_alignment(weight_matrix_np[highest_cosine_indices], weight_matrix_2, "nd")
-
-
-# In[ ]:
-
-
-centered_kernel_alignment(weight_matrix_np[highest_cosine_indices_v2], weight_matrix_2, "nd")
-
-
-# In[ ]:
-
-
-svcca(weight_matrix_np[highest_cosine_indices], weight_matrix_2, "nd")
-
-
-# In[ ]:
-
-
-svcca(weight_matrix_np[highest_cosine_indices_v2], weight_matrix_2, "nd")
 

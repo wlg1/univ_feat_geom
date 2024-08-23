@@ -1,294 +1,75 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Setup
+# # setup
 
 # In[ ]:
 
 
-from google.colab import drive
-import shutil
-
-drive.mount('/content/drive')
-
-
-# In[ ]:
-
-
-get_ipython().run_cell_magic('capture', '', 'try:\n    #import google.colab # type: ignore\n    #from google.colab import output\n    %pip install transformer-lens\nexcept:\n    from IPython import get_ipython # type: ignore\n    ipython = get_ipython(); assert ipython is not None\n    ipython.run_line_magic("load_ext", "autoreload")\n    ipython.run_line_magic("autoreload", "2")\n')
+# from google.colab import drive
+# drive.mount('/content/drive')
 
 
 # In[ ]:
 
 
-from transformer_lens import HookedTransformer
+get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
+
+
+# In[ ]:
+
+
+get_ipython().system('pip install --upgrade git+https://github.com/EleutherAI/sae.git')
+
+
+# In[ ]:
+
+
+# get the data and functions
+# !git clone https://github.com/EleutherAI/sae.git
+
+
+# In[ ]:
+
+
+# import sys
+# sys.path.append('/content/sae')
+
+
+# In[ ]:
+
+
+# %cd /content/sae/sae
+# !pwd
+# %ls
+
+
+# In[ ]:
+
+
+import pickle
+import numpy as np
+
+import torch
+import matplotlib.pyplot as plt
 
 from torch import nn, Tensor
 from jaxtyping import Float, Int
 from typing import Optional, Callable, Union, List, Tuple
 
-from datasets import load_dataset
-from rich import print as rprint  # printing highlights in data samples
-import pickle
-from google.colab import files
-
-import torch
-import os
-
-if torch.cuda.is_available():
-    device = "cuda"
-elif torch.backends.mps.is_available():
-    device = "mps"
-else:
-    device = "cpu"
-
-print("Using device:", device)
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-
-# # change input params here
 
 # In[ ]:
 
 
-model_name = "tiny-stories-1L-21M"
-model_name_2 = "tiny-stories-2L-33M"
-short_model_name = 'ts_1L_21M'
-short_model_name_2 = 'ts_2L_33M'
-layer_name = "blocks.0.hook_mlp_out"
-
-save_data_fn = 'batch_tokens_anySamps_v1.pkl'
-Wdec_filename = 'Wdec_' + short_model_name + '_LLM.pkl'
-acts_save_path = 'LLMacts_' + short_model_name + '_anySamps_v1.pkl'
-Wdec_filename_2 = 'Wdec_' + short_model_name_2 + '_LLM.pkl'
-acts_save_path_2 = 'LLMacts_' + short_model_name_2 + '_anySamps_v1.pkl'
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# # load models
+# ## corr fns
 
 # In[ ]:
 
 
-model = HookedTransformer.from_pretrained(model_name)
-
-
-# In[ ]:
-
-
-model_2 = HookedTransformer.from_pretrained(model_name_2)
-
-
-# ## load weights
-
-# In[ ]:
-
-
-model.transformer.h[0].mlp
-
-
-# In[ ]:
-
-
-from transformers import AutoModelForCausalLM
-
-model_hf = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-1Layer-21M")
-mlp_weights = model.transformer.h[0].mlp.c_proj.weight
-mlp_weights.shape
-
-
-# In[ ]:
-
-
-model_2_hf = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-2Layers-33M")
-mlp_weights_2 = model_2.transformer.h[0].mlp.c_proj.weight
-mlp_weights_2.shape
-
-
-# # load dataset
-
-# ## get data
-
-# Need load model tokenizer before obtain dataset
-
-# In[ ]:
-
-
-from transformer_lens.utils import tokenize_and_concatenate
-
-dataset = load_dataset("roneneldan/TinyStories", streaming=False)
-test_dataset = dataset['validation']
-
-token_dataset = tokenize_and_concatenate(
-    dataset = test_dataset,
-    tokenizer = model.tokenizer, # type: ignore
-    streaming=True,
-    # max_length=sae.cfg.context_size,
-    max_length=128,
-    # add_bos_token=sae.cfg.prepend_bos,
-    add_bos_token=False,
-)
-
-
-# In[ ]:
-
-
-batch_tokens = token_dataset[:500]["tokens"]
-batch_tokens.shape
-
-
-# ## save selected data
-
-# In[ ]:
-
-
-with open(save_data_fn, 'wb') as f:
-    pickle.dump(batch_tokens, f)
-
-# source_path = f'/path/to/your/file/{file_name}'
-source_path = save_data_fn
-# dest_folder = ''
-destination_path = f'/content/drive/MyDrive/{save_data_fn}'
-
-shutil.copy(source_path, destination_path) # Copy the file
-
-
-# ## load selected data
-
-# In[ ]:
-
-
-# check if saved
-file_path = '/content/drive/MyDrive/' + save_data_fn
-with open(file_path, 'rb') as f:
-    batch_tokens = pickle.load(f)
-
-
-# In[ ]:
-
-
-batch_tokens.shape
-
-
-# # get LLM actvs
-
-# In[ ]:
-
-
-h_store = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model.cfg.d_model), device=model.cfg.device)
-h_store.shape
-
-
-# In[ ]:
-
-
-def store_h_hook(
-    pattern: Float[Tensor, "batch seqlen d_model"],
-    hook
-):
-    h_store[:] = pattern  # this works b/c changes values, not replaces entire thing
-
-
-# In[ ]:
-
-
-model.run_with_hooks(
-    batch_tokens,
-    return_type = None,
-    fwd_hooks=[
-        (layer_name, store_h_hook),
-    ]
-)
-
-
-# In[ ]:
-
-
-h_store[:3, :3, :3]
-
-
-# In[ ]:
-
-
-h_store_2 = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model_2.cfg.d_model), device=model_2.cfg.device)
-def store_h_hook_2(
-    pattern: Float[Tensor, "batch seqlen d_model"],
-    hook
-):
-    h_store_2[:] = pattern  # this works b/c changes values, not replaces entire thing
-
-model_2.run_with_hooks(
-    batch_tokens,
-    return_type = None,
-    fwd_hooks=[
-        (layer_name, store_h_hook_2),
-    ]
-)
-h_store_2[:3, :3, :3]
-
-
-# ## save actvs
-
-# In[ ]:
-
-
-with open(acts_save_path, 'wb') as f:
-    pickle.dump(h_store, f)
-
-# source_path = f'/path/to/your/file/{file_name}'
-source_path = acts_save_path
-# dest_folder = ''
-destination_path = f'/content/drive/MyDrive/{acts_save_path}'
-
-shutil.copy(source_path, destination_path) # Copy the file
-
-
-# In[ ]:
-
-
-with open(acts_save_path_2, 'wb') as f:
-    pickle.dump(h_store_2, f)
-
-# source_path = f'/path/to/your/file/{file_name}'
-source_path = acts_save_path_2
-# dest_folder = ''
-destination_path = f'/content/drive/MyDrive/{acts_save_path_2}'
-
-shutil.copy(source_path, destination_path) # Copy the file
-
-
-# In[ ]:
-
-
-# check if saved
-file_path = '/content/drive/MyDrive/' + acts_save_path
-with open(file_path, 'rb') as f:
-    h_store = pickle.load(f)
-
-
-# ## reshape for corr
-
-# In[ ]:
-
-
-first_dim_reshaped = h_store.shape[0] * h_store.shape[1]
-reshaped_activations_A = h_store.reshape(first_dim_reshaped, h_store.shape[-1]).cpu()
-reshaped_activations_B = h_store_2.reshape(first_dim_reshaped, h_store_2.shape[-1]).cpu()
-
-
-# In[ ]:
-
-
-reshaped_activations_A.shape
-
-
-# # neuron corr by actvs
-
-# ## fns
-
-# In[ ]:
-
-
-def find_all_highest_correlations(reshaped_activations_A, reshaped_activations_B):
+def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
     # Ensure tensors are on GPU
     if torch.cuda.is_available():
         reshaped_activations_A = reshaped_activations_A.to('cuda')
@@ -304,71 +85,189 @@ def find_all_highest_correlations(reshaped_activations_A, reshaped_activations_B
     std_B = reshaped_activations_B.std(dim=0, keepdim=True)
     normalized_B = (reshaped_activations_B - mean_B) / (std_B + 1e-8)  # Avoid division by zero
 
-    # Compute correlation matrix
-    correlation_matrix = torch.matmul(normalized_A.t(), normalized_B) / normalized_A.shape[0]
+    num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
+    max_values = []
+    max_indices = []
 
-    # Handle NaNs by setting them to -inf
-    correlation_matrix = torch.where(torch.isnan(correlation_matrix), torch.tensor(float('-inf')).to(correlation_matrix.device), correlation_matrix)
+    for batch in range(num_batches):
+        start = batch * batch_size
+        end = min(start + batch_size, normalized_B.shape[1])
+        batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
+        max_val, max_idx = batch_corr_matrix.max(dim=0)
+        max_values.append(max_val)
+        # max_indices.append(max_idx + start)  # Adjust indices for the batch offset
+        max_indices.append(max_idx)  # Adjust indices for the batch offset
 
-    # Get the highest correlation indices and values
-    highest_correlations_values, highest_correlations_indices = correlation_matrix.max(dim=0)
+        del batch_corr_matrix
+        torch.cuda.empty_cache()
 
-    # Move results back to CPU
-    highest_correlations_indices = highest_correlations_indices.cpu().detach().numpy()
-    highest_correlations_values = highest_correlations_values.cpu().detach().numpy()
-
-    return highest_correlations_indices, highest_correlations_values
-
-
-# ## test
-
-# In[ ]:
+    return torch.cat(max_indices), torch.cat(max_values)
 
 
-highest_correlations_indices, highest_correlations_values = find_all_highest_correlations(reshaped_activations_A, reshaped_activations_B)
-print(f'Highest correlations indices: {highest_correlations_indices}')
-print(f'Highest correlations values: {highest_correlations_values}')
-
+# ## sim fns
 
 # In[ ]:
 
 
-len(highest_correlations_indices)
+import functools
+from typing import Any, Callable, Dict, List, Tuple, Union
+
+import numpy as np
+import numpy.typing as npt
+import torch
+
+
+def to_numpy_if_needed(*args: Union[torch.Tensor, npt.NDArray]) -> List[npt.NDArray]:
+    def convert(x: Union[torch.Tensor, npt.NDArray]) -> npt.NDArray:
+        return x if isinstance(x, np.ndarray) else x.numpy()
+
+    return list(map(convert, args))
+
+
+def to_torch_if_needed(*args: Union[torch.Tensor, npt.NDArray]) -> List[torch.Tensor]:
+    def convert(x: Union[torch.Tensor, npt.NDArray]) -> torch.Tensor:
+        return x if isinstance(x, torch.Tensor) else torch.from_numpy(x)
+
+    return list(map(convert, args))
+
+
+def adjust_dimensionality(
+    R: npt.NDArray, Rp: npt.NDArray, strategy="zero_pad"
+) -> Tuple[npt.NDArray, npt.NDArray]:
+    D = R.shape[1]
+    Dp = Rp.shape[1]
+    if strategy == "zero_pad":
+        if D - Dp == 0:
+            return R, Rp
+        elif D - Dp > 0:
+            return R, np.concatenate((Rp, np.zeros((Rp.shape[0], D - Dp))), axis=1)
+        else:
+            return np.concatenate((R, np.zeros((R.shape[0], Dp - D))), axis=1), Rp
+    else:
+        raise NotImplementedError()
+
+
+def center_columns(R: npt.NDArray) -> npt.NDArray:
+    return R - R.mean(axis=0)[None, :]
+
+
+def normalize_matrix_norm(R: npt.NDArray) -> npt.NDArray:
+    return R / np.linalg.norm(R, ord="fro")
+
+
+def sim_random_baseline(
+    rep1: torch.Tensor, rep2: torch.Tensor, sim_func: Callable, n_permutations: int = 10
+) -> Dict[str, Any]:
+    torch.manual_seed(1234)
+    scores = []
+    for _ in range(n_permutations):
+        perm = torch.randperm(rep1.size(0))
+
+        score = sim_func(rep1[perm, :], rep2)
+        score = score if isinstance(score, float) else score["score"]
+
+        scores.append(score)
+
+    return {"baseline_scores": np.array(scores)}
+
+
+class Pipeline:
+    def __init__(
+        self,
+        preprocess_funcs: List[Callable[[npt.NDArray], npt.NDArray]],
+        similarity_func: Callable[[npt.NDArray, npt.NDArray], Dict[str, Any]],
+    ) -> None:
+        self.preprocess_funcs = preprocess_funcs
+        self.similarity_func = similarity_func
+
+    def __call__(self, R: npt.NDArray, Rp: npt.NDArray) -> Dict[str, Any]:
+        for preprocess_func in self.preprocess_funcs:
+            R = preprocess_func(R)
+            Rp = preprocess_func(Rp)
+        return self.similarity_func(R, Rp)
+
+    def __str__(self) -> str:
+        def func_name(func: Callable) -> str:
+            return (
+                func.__name__
+                if not isinstance(func, functools.partial)
+                else func.func.__name__
+            )
+
+        def partial_keywords(func: Callable) -> str:
+            if not isinstance(func, functools.partial):
+                return ""
+            else:
+                return str(func.keywords)
+
+        return (
+            "Pipeline("
+            + (
+                "+".join(map(func_name, self.preprocess_funcs))
+                + "+"
+                + func_name(self.similarity_func)
+                + partial_keywords(self.similarity_func)
+            )
+            + ")"
+        )
 
 
 # In[ ]:
 
 
-len(list(set(highest_correlations_indices)))
+from typing import List, Set, Union
+
+import numpy as np
+import numpy.typing as npt
+import sklearn.neighbors
+import torch
+
+# from llmcomp.measures.utils import to_numpy_if_needed
 
 
-# In[ ]:
+def _jac_sim_i(idx_R: Set[int], idx_Rp: Set[int]) -> float:
+    return len(idx_R.intersection(idx_Rp)) / len(idx_R.union(idx_Rp))
 
 
-sum(highest_correlations_values) / len(highest_correlations_values)
+def jaccard_similarity(
+    R: Union[torch.Tensor, npt.NDArray],
+    Rp: Union[torch.Tensor, npt.NDArray],
+    k: int = 10,
+    inner: str = "cosine",
+    n_jobs: int = 8,
+) -> float:
+    R, Rp = to_numpy_if_needed(R, Rp)
+
+    indices_R = nn_array_to_setlist(top_k_neighbors(R, k, inner, n_jobs))
+    indices_Rp = nn_array_to_setlist(top_k_neighbors(Rp, k, inner, n_jobs))
+
+    return float(
+        np.mean(
+            [_jac_sim_i(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indices_Rp)]
+        )
+    )
 
 
-# ## compare to SAE corrs
+def top_k_neighbors(
+    R: npt.NDArray,
+    k: int,
+    inner: str,
+    n_jobs: int,
+) -> npt.NDArray:
+    # k+1 nearest neighbors, because we pass in all the data, which means that a point
+    # will be the nearest neighbor to itself. We remove this point from the results and
+    # report only the k nearest neighbors distinct from the point itself.
+    nns = sklearn.neighbors.NearestNeighbors(
+        n_neighbors=k + 1, metric=inner, n_jobs=n_jobs
+    )
+    nns.fit(R)
+    _, nns = nns.kneighbors(R)
+    return nns[:, 1:]
 
-# In[ ]:
 
+def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
+    return [set(idx) for idx in nn]
 
-import pickle
-# with open('highest_corr_inds_1L_2L_MLP0_16k_30k_relu.pkl', 'rb') as f:
-#     highest_correlations_indices_saes = pickle.load(f)
-with open('highest_corr_vals_1L_2L_MLP0_16k_30k_relu.pkl', 'rb') as f:
-    highest_correlations_values_saes = pickle.load(f)
-
-
-# In[ ]:
-
-
-sum(highest_correlations_values_saes) / len(highest_correlations_values_saes)
-
-
-# # svcca
-
-# ## fns
 
 # In[ ]:
 
@@ -695,6 +594,97 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     R = torch.reshape(R, (R.shape[0], -1))
     log.debug("Shape after flattening: %s", str(R.shape))
     return R
+
+
+# In[ ]:
+
+
+from typing import Optional
+from typing import Union
+
+import numpy as np
+import numpy.typing as npt
+import scipy.spatial.distance
+import scipy.stats
+import sklearn.metrics
+import torch
+# from repsim.measures.utils import flatten
+# from repsim.measures.utils import RSMSimilarityMeasure
+# from repsim.measures.utils import SHAPE_TYPE
+# from repsim.measures.utils import to_numpy_if_needed
+
+
+def representational_similarity_analysis(
+    R: Union[torch.Tensor, npt.NDArray],
+    Rp: Union[torch.Tensor, npt.NDArray],
+    shape: SHAPE_TYPE,
+    inner="correlation",
+    outer="spearman",
+    n_jobs: Optional[int] = None,
+) -> float:
+    """Representational similarity analysis
+
+    Args:
+        R (Union[torch.Tensor, npt.NDArray]): N x D representation
+        Rp (Union[torch.Tensor, npt.NDArray]): N x D' representation
+        inner (str, optional): inner similarity function for RSM. Must be one of
+            scipy.spatial.distance.pdist identifiers . Defaults to "correlation".
+        outer (str, optional): outer similarity function that compares RSMs. Defaults to
+             "spearman". Must be one of "spearman", "euclidean"
+
+    Returns:
+        float: _description_
+    """
+    R, Rp = flatten(R, Rp, shape=shape)
+    R, Rp = to_numpy_if_needed(R, Rp)
+
+    if inner == "correlation":
+        # n_jobs only works if metric is in PAIRWISE_DISTANCES as defined in sklearn, i.e., not for correlation.
+        # But correlation = 1 - cosine dist of row-centered data, so we use the faster cosine metric and center the data.
+        R = R - R.mean(axis=1, keepdims=True)
+        S = scipy.spatial.distance.squareform(  # take the lower triangle of RSM
+            1 - sklearn.metrics.pairwise_distances(R, metric="cosine", n_jobs=n_jobs),  # type:ignore
+            checks=False,
+        )
+        Rp = Rp - Rp.mean(axis=1, keepdims=True)
+        Sp = scipy.spatial.distance.squareform(
+            1 - sklearn.metrics.pairwise_distances(Rp, metric="cosine", n_jobs=n_jobs),  # type:ignore
+            checks=False,
+        )
+    elif inner == "euclidean":
+        # take the lower triangle of RSM
+        S = scipy.spatial.distance.squareform(
+            sklearn.metrics.pairwise_distances(R, metric=inner, n_jobs=n_jobs), checks=False
+        )
+        Sp = scipy.spatial.distance.squareform(
+            sklearn.metrics.pairwise_distances(Rp, metric=inner, n_jobs=n_jobs), checks=False
+        )
+    else:
+        raise NotImplementedError(f"{inner=}")
+
+    if outer == "spearman":
+        return scipy.stats.spearmanr(S, Sp).statistic  # type:ignore
+    elif outer == "euclidean":
+        return float(np.linalg.norm(S - Sp, ord=2))
+    else:
+        raise ValueError(f"Unknown outer similarity function: {outer}")
+
+
+class RSA(RSMSimilarityMeasure):
+    def __init__(self):
+        # choice of inner/outer in __call__ if fixed to default values, so these values are always the same
+        super().__init__(
+            sim_func=representational_similarity_analysis,
+            larger_is_more_similar=True,
+            is_metric=False,
+            is_symmetric=True,
+            invariant_to_affine=False,
+            invariant_to_invertible_linear=False,
+            invariant_to_ortho=False,
+            invariant_to_permutation=True,
+            invariant_to_isotropic_scaling=True,
+            invariant_to_translation=True,
+        )
 
 
 # In[ ]:
@@ -1286,432 +1276,682 @@ class PWCCA(RepresentationalSimilarityMeasure):
         return self.sim_func(R, Rp, shape)
 
 
-# ## compare
+# ## get rand
 
 # In[ ]:
 
 
-mlp_weights.shape
+def score_rand(num_feats, sim_fn, shapereq_bool=False):
+    all_rand_scores = []
+    # num_feats = len(uniq_corr_indices_AB_forA)
+    for i in range(10):
+        rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=num_feats).tolist()
+        rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=num_feats).tolist()
 
-
-# In[ ]:
-
-
-svcca(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy(), "nd")
-
-
-# ## compare by align actv corr
-
-# In[ ]:
-
-
-svcca(mlp_weights.detach().numpy()[highest_correlations_indices], mlp_weights_2.detach().numpy(), "nd")
-
-
-# # jaccard MNN
-
-# ## fns
-
-# In[ ]:
-
-
-import functools
-from typing import Any, Callable, Dict, List, Tuple, Union
-
-import numpy as np
-import numpy.typing as npt
-import torch
-
-
-def to_numpy_if_needed(*args: Union[torch.Tensor, npt.NDArray]) -> List[npt.NDArray]:
-    def convert(x: Union[torch.Tensor, npt.NDArray]) -> npt.NDArray:
-        return x if isinstance(x, np.ndarray) else x.numpy()
-
-    return list(map(convert, args))
-
-
-def to_torch_if_needed(*args: Union[torch.Tensor, npt.NDArray]) -> List[torch.Tensor]:
-    def convert(x: Union[torch.Tensor, npt.NDArray]) -> torch.Tensor:
-        return x if isinstance(x, torch.Tensor) else torch.from_numpy(x)
-
-    return list(map(convert, args))
-
-
-def adjust_dimensionality(
-    R: npt.NDArray, Rp: npt.NDArray, strategy="zero_pad"
-) -> Tuple[npt.NDArray, npt.NDArray]:
-    D = R.shape[1]
-    Dp = Rp.shape[1]
-    if strategy == "zero_pad":
-        if D - Dp == 0:
-            return R, Rp
-        elif D - Dp > 0:
-            return R, np.concatenate((Rp, np.zeros((Rp.shape[0], D - Dp))), axis=1)
+        if shapereq_bool:
+            score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
         else:
-            return np.concatenate((R, np.zeros((R.shape[0], Dp - D))), axis=1), Rp
-    else:
-        raise NotImplementedError()
+            score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
+        all_rand_scores.append(score)
+    print(sum(all_rand_scores) / len(all_rand_scores))
+    plt.hist(all_rand_scores)
+    plt.show()
+    return sum(all_rand_scores) / len(all_rand_scores)
 
 
-def center_columns(R: npt.NDArray) -> npt.NDArray:
-    return R - R.mean(axis=0)[None, :]
+# In[ ]:
 
 
-def normalize_matrix_norm(R: npt.NDArray) -> npt.NDArray:
-    return R / np.linalg.norm(R, ord="fro")
+# import random
+# row_idxs = list(range(weight_matrix_2.shape[0]))
+# random.shuffle(row_idxs)
+# jaccard_similarity(weight_matrix_np, weight_matrix_2[row_idxs])
 
 
-def sim_random_baseline(
-    rep1: torch.Tensor, rep2: torch.Tensor, sim_func: Callable, n_permutations: int = 10
-) -> Dict[str, Any]:
-    torch.manual_seed(1234)
-    scores = []
-    for _ in range(n_permutations):
-        perm = torch.randperm(rep1.size(0))
+# # load models
 
-        score = sim_func(rep1[perm, :], rep2)
-        score = score if isinstance(score, float) else score["score"]
-
-        scores.append(score)
-
-    return {"baseline_scores": np.array(scores)}
+# In[ ]:
 
 
-class Pipeline:
-    def __init__(
-        self,
-        preprocess_funcs: List[Callable[[npt.NDArray], npt.NDArray]],
-        similarity_func: Callable[[npt.NDArray, npt.NDArray], Dict[str, Any]],
-    ) -> None:
-        self.preprocess_funcs = preprocess_funcs
-        self.similarity_func = similarity_func
+from transformer_lens import HookedTransformer
+model = HookedTransformer.from_pretrained("gpt2-small", device = device)
 
-    def __call__(self, R: npt.NDArray, Rp: npt.NDArray) -> Dict[str, Any]:
-        for preprocess_func in self.preprocess_funcs:
-            R = preprocess_func(R)
-            Rp = preprocess_func(Rp)
-        return self.similarity_func(R, Rp)
 
-    def __str__(self) -> str:
-        def func_name(func: Callable) -> str:
-            return (
-                func.__name__
-                if not isinstance(func, functools.partial)
-                else func.func.__name__
+# In[ ]:
+
+
+model_2 = HookedTransformer.from_pretrained("pythia-70m-deduped", device = device)
+
+
+# In[ ]:
+
+
+model_2
+
+
+# # compare dataset tokenization
+
+# In[ ]:
+
+
+# import pickle
+# file_path = '/content/drive/MyDrive/sae_files/batch_tokens_anySamps_v1.pkl'
+# with open(file_path, 'rb') as f:
+#     batch_tokens = pickle.load(f)
+
+# batch_tokens = batch_tokens[:100]
+
+
+# In[ ]:
+
+
+# from transformers import AutoTokenizer
+
+# tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+
+# In[ ]:
+
+
+from transformer_lens.utils import tokenize_and_concatenate
+from datasets import load_dataset
+
+dataset = load_dataset("roneneldan/TinyStories", streaming=False)
+test_dataset = dataset['validation']
+
+
+# In[ ]:
+
+
+test_dataset
+
+
+# In[ ]:
+
+
+test_dataset['text'][0]
+
+
+# In[ ]:
+
+
+onesamp_tokens = model.tokenizer.encode(test_dataset['text'][0])
+len(onesamp_tokens)
+
+
+# In[ ]:
+
+
+token_dataset = tokenize_and_concatenate(
+    dataset = test_dataset,
+    tokenizer = model.tokenizer, # type: ignore
+    streaming=True,
+    # max_length=sae.cfg.context_size,
+    max_length=128,
+    # add_bos_token=sae.cfg.prepend_bos,
+    add_bos_token=False,
+)
+
+
+# In[ ]:
+
+
+token_dataset_2 = tokenize_and_concatenate(
+    dataset = test_dataset,
+    tokenizer = model_2.tokenizer, # type: ignore
+    streaming=True,
+    # max_length=sae.cfg.context_size,
+    max_length=128,
+    # add_bos_token=sae.cfg.prepend_bos,
+    add_bos_token=False,
+)
+
+
+# In[ ]:
+
+
+token_dataset
+
+
+# In[ ]:
+
+
+token_dataset_2
+
+
+# In[ ]:
+
+
+print(token_dataset["tokens"].shape)
+token_dataset_2["tokens"].shape
+
+
+# In[ ]:
+
+
+batch_tokens_1 = token_dataset[:500]["tokens"]
+batch_tokens_1.shape
+
+
+# In[ ]:
+
+
+batch_tokens_1
+
+
+# In[ ]:
+
+
+batch_tokens_2 = token_dataset_2[:500]["tokens"]
+batch_tokens_2.shape
+
+
+# In[ ]:
+
+
+batch_tokens_2
+
+
+# In[ ]:
+
+
+model.tokenizer.decode(batch_tokens_1[0])
+
+
+# In[ ]:
+
+
+model_2.tokenizer.decode(batch_tokens_1[0])
+
+
+# In[ ]:
+
+
+model_2.tokenizer.decode(batch_tokens_2[0])
+
+
+# In[ ]:
+
+
+model.tokenizer.decode(batch_tokens_1[80])
+
+
+# In[ ]:
+
+
+model_2.tokenizer.decode(batch_tokens_2[80])
+
+
+# # load sae weights
+
+# ## use hf default
+
+# In[36]:
+
+
+get_ipython().system('huggingface-cli login')
+
+
+# In[38]:
+
+
+from transformers import AutoModelForCausalLM
+model_path = "EleutherAI/sae-pythia-70m-32k/layers.4"
+model = AutoModelForCausalLM.from_pretrained(model_path)
+
+
+# In[40]:
+
+
+from huggingface_hub import snapshot_download, hf_hub_download
+from pathlib import Path
+import torch
+
+# Download the specific directory
+repo_name = "EleutherAI/sae-pythia-70m-32k"
+layer_dir = "layers.4"
+
+repo_path = Path(
+    snapshot_download(
+        repo_name,
+        allow_patterns=f"{layer_dir}/*"
+    )
+)
+
+print(f"Downloaded directory: {repo_path / layer_dir}")
+
+# Download the config.json from the main directory
+config_path = hf_hub_download(repo_name, "config.json")
+print(f"Downloaded config: {config_path}")
+
+# Load the layer
+layer_path = repo_path / layer_dir / "layer.safetensors"
+layer = torch.load(layer_path, map_location="cpu")
+
+print("Layer loaded successfully")
+print(f"Layer keys: {layer.keys()}")
+
+# If you need to use the config
+import json
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+print(f"Model config: {config}")
+
+# Note: You can't directly use this layer for inference as it's just a part of the model
+# You would need to integrate it into a complete model architecture to use it
+
+
+# ## use repo code
+
+# In[ ]:
+
+
+import json
+from fnmatch import fnmatch
+from pathlib import Path
+from typing import NamedTuple
+
+import einops
+import torch
+from huggingface_hub import snapshot_download
+from natsort import natsorted
+from safetensors.torch import load_model, save_model
+from torch import Tensor, nn
+
+# from .config import SaeConfig
+# from .utils import decoder_impl
+
+from sae.config import SaeConfig
+from sae.utils import decoder_impl
+
+
+# In[47]:
+
+
+name = "EleutherAI/sae-pythia-70m-32k"
+hookpoint = "layers.4"
+
+repo_path = Path(
+            snapshot_download(
+                name,
+                allow_patterns=f"{hookpoint}/*" if hookpoint is not None else None,
+                # allow_patterns = None
             )
-
-        def partial_keywords(func: Callable) -> str:
-            if not isinstance(func, functools.partial):
-                return ""
-            else:
-                return str(func.keywords)
-
-        return (
-            "Pipeline("
-            + (
-                "+".join(map(func_name, self.preprocess_funcs))
-                + "+"
-                + func_name(self.similarity_func)
-                + partial_keywords(self.similarity_func)
-            )
-            + ")"
         )
 
 
+# In[48]:
+
+
+repo_path
+
+
+# In[49]:
+
+
+if hookpoint is not None:
+    repo_path = repo_path / hookpoint
+repo_path
+
+
+# In[50]:
+
+
+path = Path(repo_path)
+path
+
+
+# In[51]:
+
+
+# f = path / "cfg.json"
+# cfg_dict = json.load(f)
+
+
 # In[ ]:
 
 
-from typing import List, Set, Union
+# cfg_dict = {"expansion_factor": 32, "normalize_decoder": true, "num_latents": 32768, "k": 16, "signed": false, "d_in": 512}
+cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": 512}
 
-import numpy as np
-import numpy.typing as npt
-import sklearn.neighbors
+
+# In[ ]:
+
+
+d_in = cfg_dict.pop("d_in")
+cfg = SaeConfig(**cfg_dict)
+
+
+# In[ ]:
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+decoder = True
+
+
+# In[ ]:
+
+
+sae = Sae(d_in, cfg, device=device, decoder=decoder)
+
+
+# In[53]:
+
+
+# customname = Path("EleutherAI/sae-pythia-70m-32k/layers.4")
+customname = Path("/root/.cache/huggingface/hub/models--EleutherAI--sae-pythia-70m-32k/layers.4")
+
+load_model(
+    model=sae,
+    filename=str(path / "sae.safetensors"),
+    # filename=str(customname / "sae.safetensors"),
+    device=str(device),
+    # TODO: Maybe be more fine-grained about this in the future?
+    strict=decoder,
+)
+
+
+# In[59]:
+
+
+sae
+
+
+# ## readme code
+
+# In[ ]:
+
+
+from sae import Sae
+
+sae = Sae.load_from_hub("EleutherAI/sae-pythia-70m-32k", hookpoint="layers.4")
+
+
+# ## get weights
+
+# In[ ]:
+
+
+# i=4
+# layer_name = f"blocks.{i}.hook_mlp_out"
+
+
+# In[63]:
+
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-# from llmcomp.measures.utils import to_numpy_if_needed
+tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
+inputs = tokenizer("Hello, world!", return_tensors="pt")
+
+with torch.inference_mode():
+    model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m")
+    outputs = model(**inputs, output_hidden_states=True)
+
+    latent_acts = []
+    # for sae, hidden_state in zip(sae.values(), outputs.hidden_states):
+    #     latent_acts.append(sae.encode(hidden_state))
+    hidden_state = outputs.hidden_states[0].to("cuda")
+    latent_acts.append(sae.encode(hidden_state))
+
+# Do stuff with the latent activations
 
 
-def _jac_sim_i(idx_R: Set[int], idx_Rp: Set[int]) -> float:
-    return len(idx_R.intersection(idx_Rp)) / len(idx_R.union(idx_Rp))
+# In[71]:
 
 
-def jaccard_similarity(
-    R: Union[torch.Tensor, npt.NDArray],
-    Rp: Union[torch.Tensor, npt.NDArray],
-    k: int = 10,
-    inner: str = "cosine",
-    n_jobs: int = 8,
-) -> float:
-    R, Rp = to_numpy_if_needed(R, Rp)
+latent_acts[0]
 
-    indices_R = nn_array_to_setlist(top_k_neighbors(R, k, inner, n_jobs))
-    indices_Rp = nn_array_to_setlist(top_k_neighbors(Rp, k, inner, n_jobs))
 
-    return float(
-        np.mean(
-            [_jac_sim_i(idx_R, idx_Rp) for idx_R, idx_Rp in zip(indices_R, indices_Rp)]
-        )
+# # get llm actvs
+
+# In[ ]:
+
+
+h_store = torch.zeros((batch_tokens_1.shape[0], batch_tokens_1.shape[1], model.cfg.d_model), device=model.cfg.device)
+
+def store_h_hook(
+    pattern: Float[Tensor, "batch seqlen d_model"],
+    hook
+):
+    h_store[:] = pattern  # this works b/c changes values, not replaces entire thing
+
+model.run_with_hooks(
+    batch_tokens_1,
+    return_type = None,
+    fwd_hooks=[
+        (layer_name, store_h_hook),
+    ]
+)
+
+
+# In[ ]:
+
+
+h_store.shape
+
+
+# In[ ]:
+
+
+h_store_2 = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model_2.cfg.d_model), device=model_2.cfg.device)
+
+def store_h_hook_2(
+    pattern: Float[Tensor, "batch seqlen d_model"],
+    hook
+):
+    h_store_2[:] = pattern  # this works b/c changes values, not replaces entire thing
+
+model_2.run_with_hooks(
+    batch_tokens,
+    return_type = None,
+    fwd_hooks=[
+        (layer_name, store_h_hook_2),
+    ]
+)
+
+
+# In[ ]:
+
+
+h_store_2.shape
+
+
+# # get sae actvs
+
+# In[ ]:
+
+
+sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+with torch.no_grad():
+    feature_acts_model_A = sae.encode(h_store)
+
+
+# In[ ]:
+
+
+feature_acts_model_A.shape
+
+
+# In[ ]:
+
+
+sae_2.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+with torch.no_grad():
+    feature_acts_model_B = sae_2.encode(h_store_2)
+
+
+# In[ ]:
+
+
+feature_acts_model_B.shape
+
+
+# In[ ]:
+
+
+first_dim_reshaped = feature_acts_model_A.shape[0] * feature_acts_model_A.shape[1]
+reshaped_activations_A = feature_acts_model_A.reshape(first_dim_reshaped, feature_acts_model_A.shape[-1]).cpu()
+# del feature_acts_model_A
+# torch.cuda.empty_cache()
+
+
+# In[ ]:
+
+
+reshaped_activations_B = feature_acts_model_B.reshape(first_dim_reshaped, feature_acts_model_B.shape[-1]).cpu()
+# del feature_acts_model_B
+# torch.cuda.empty_cache()
+
+
+# # align actvs by common phrase
+
+# In[ ]:
+
+
+
+
+
+# # get corrs
+
+# `batched_correlation(reshaped_activations_B, reshaped_activations_A)` : highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals. Use the list with smaller number of features (cols) as the second arg
+
+# In[ ]:
+
+
+highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_B, reshaped_activations_A)
+highest_correlations_indices_AB = highest_correlations_indices_AB.cpu().numpy()
+highest_correlations_values_AB = highest_correlations_values_AB.cpu().numpy()
+
+
+# In[ ]:
+
+
+num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
+print(num_unq_pairs)
+num_unq_pairs / len(highest_correlations_indices_AB)
+
+
+# In[ ]:
+
+
+sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+
+
+# In[ ]:
+
+
+highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+highest_correlations_indices_AB = highest_correlations_indices_AB.cpu().numpy()
+highest_correlations_values_AB = highest_correlations_values_AB.cpu().numpy()
+
+
+# In[ ]:
+
+
+num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
+print(num_unq_pairs)
+num_unq_pairs / len(highest_correlations_indices_AB)
+
+
+# In[ ]:
+
+
+sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+
+
+# # loop compare gpt2 sae actvs
+
+# In[ ]:
+
+
+# layer_to_dictscores = {}
+
+for i in range(8, 9): # 0, 12
+    layer_name = f"blocks.{i}.hook_mlp_out"
+    dictscores = {}
+
+    sae, cfg_dict, sparsity = SAE.from_pretrained(
+        release = "gpt2-small-mlp-out-v5-32k",
+        sae_id = layer_name,
+        device = device
     )
 
+    weight_matrix_2 = sae.W_dec.cpu()
+    weight_matrix_2 = weight_matrix_2.detach().numpy()
 
-def top_k_neighbors(
-    R: npt.NDArray,
-    k: int,
-    inner: str,
-    n_jobs: int,
-) -> npt.NDArray:
-    # k+1 nearest neighbors, because we pass in all the data, which means that a point
-    # will be the nearest neighbor to itself. We remove this point from the results and
-    # report only the k nearest neighbors distinct from the point itself.
-    nns = sklearn.neighbors.NearestNeighbors(
-        n_neighbors=k + 1, metric=inner, n_jobs=n_jobs
+    h_store = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model.cfg.d_model), device=model.cfg.device)
+    # h_store.shape
+
+    def store_h_hook(
+        pattern: Float[Tensor, "batch seqlen d_model"],
+        hook
+    ):
+        h_store[:] = pattern  # this works b/c changes values, not replaces entire thing
+
+    model.run_with_hooks(
+        batch_tokens,
+        return_type = None,
+        fwd_hooks=[
+            (layer_name, store_h_hook),
+        ]
     )
-    nns.fit(R)
-    _, nns = nns.kneighbors(R)
-    return nns[:, 1:]
 
+    sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+    with torch.no_grad():
+        feature_acts_model_B = sae.encode(h_store)
 
-def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
-    return [set(idx) for idx in nn]
+    reshaped_activations_B = feature_acts_model_B.reshape(first_dim_reshaped, feature_acts_model_B.shape[-1]).cpu()
+    del feature_acts_model_B
+    torch.cuda.empty_cache()
 
-
-# ## entire space
-
-# In[ ]:
-
-
-mlp_weights.shape
-
-
-# In[ ]:
-
-
-jaccard_similarity(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy())
-
-
-# In[ ]:
-
-
-jaccard_similarity(mlp_weights.detach().numpy()[highest_correlations_indices], mlp_weights_2.detach().numpy())
-
-
-# In[ ]:
-
-
-jaccard_similarity(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy()[highest_correlations_indices])
-
-
-# # RSA
-
-# ## fns
-
-# In[ ]:
-
-
-from typing import Optional
-from typing import Union
-
-import numpy as np
-import numpy.typing as npt
-import scipy.spatial.distance
-import scipy.stats
-import sklearn.metrics
-import torch
-# from repsim.measures.utils import flatten
-# from repsim.measures.utils import RSMSimilarityMeasure
-# from repsim.measures.utils import SHAPE_TYPE
-# from repsim.measures.utils import to_numpy_if_needed
-
-
-def representational_similarity_analysis(
-    R: Union[torch.Tensor, npt.NDArray],
-    Rp: Union[torch.Tensor, npt.NDArray],
-    shape: SHAPE_TYPE,
-    inner="correlation",
-    outer="spearman",
-    n_jobs: Optional[int] = None,
-) -> float:
-    """Representational similarity analysis
-
-    Args:
-        R (Union[torch.Tensor, npt.NDArray]): N x D representation
-        Rp (Union[torch.Tensor, npt.NDArray]): N x D' representation
-        inner (str, optional): inner similarity function for RSM. Must be one of
-            scipy.spatial.distance.pdist identifiers . Defaults to "correlation".
-        outer (str, optional): outer similarity function that compares RSMs. Defaults to
-             "spearman". Must be one of "spearman", "euclidean"
-
-    Returns:
-        float: _description_
     """
-    R, Rp = flatten(R, Rp, shape=shape)
-    R, Rp = to_numpy_if_needed(R, Rp)
-
-    if inner == "correlation":
-        # n_jobs only works if metric is in PAIRWISE_DISTANCES as defined in sklearn, i.e., not for correlation.
-        # But correlation = 1 - cosine dist of row-centered data, so we use the faster cosine metric and center the data.
-        R = R - R.mean(axis=1, keepdims=True)
-        S = scipy.spatial.distance.squareform(  # take the lower triangle of RSM
-            1 - sklearn.metrics.pairwise_distances(R, metric="cosine", n_jobs=n_jobs),  # type:ignore
-            checks=False,
-        )
-        Rp = Rp - Rp.mean(axis=1, keepdims=True)
-        Sp = scipy.spatial.distance.squareform(
-            1 - sklearn.metrics.pairwise_distances(Rp, metric="cosine", n_jobs=n_jobs),  # type:ignore
-            checks=False,
-        )
-    elif inner == "euclidean":
-        # take the lower triangle of RSM
-        S = scipy.spatial.distance.squareform(
-            sklearn.metrics.pairwise_distances(R, metric=inner, n_jobs=n_jobs), checks=False
-        )
-        Sp = scipy.spatial.distance.squareform(
-            sklearn.metrics.pairwise_distances(Rp, metric=inner, n_jobs=n_jobs), checks=False
-        )
-    else:
-        raise NotImplementedError(f"{inner=}")
-
-    if outer == "spearman":
-        return scipy.stats.spearmanr(S, Sp).statistic  # type:ignore
-    elif outer == "euclidean":
-        return float(np.linalg.norm(S - Sp, ord=2))
-    else:
-        raise ValueError(f"Unknown outer similarity function: {outer}")
-
-
-class RSA(RSMSimilarityMeasure):
-    def __init__(self):
-        # choice of inner/outer in __call__ if fixed to default values, so these values are always the same
-        super().__init__(
-            sim_func=representational_similarity_analysis,
-            larger_is_more_similar=True,
-            is_metric=False,
-            is_symmetric=True,
-            invariant_to_affine=False,
-            invariant_to_invertible_linear=False,
-            invariant_to_ortho=False,
-            invariant_to_permutation=True,
-            invariant_to_isotropic_scaling=True,
-            invariant_to_translation=True,
-        )
-
-
-# ## all decoder weights
-
-# In[ ]:
-
-
-representational_similarity_analysis(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy(), "nd")
-
-
-# In[ ]:
-
-
-representational_similarity_analysis(mlp_weights.detach().numpy()[highest_correlations_indices], mlp_weights_2.detach().numpy(), "nd")
-
-
-# # align perm by cosine sim
-
-# ## fn
-
-# In[ ]:
-
-
-import numpy as np
-
-def find_all_highest_cosine_similarities(reshaped_activations_A, reshaped_activations_B):
-    # Normalize rows of A (each vector) for cosine similarity
-    norms_A = np.linalg.norm(reshaped_activations_A, axis=1, keepdims=True)
-    normalized_A = reshaped_activations_A / (norms_A + 1e-8)  # Avoid division by zero
-
-    # Normalize rows of B (each vector) for cosine similarity
-    norms_B = np.linalg.norm(reshaped_activations_B, axis=1, keepdims=True)
-    normalized_B = reshaped_activations_B / (norms_B + 1e-8)  # Avoid division by zero
-
-    # Compute cosine similarity matrix
-    cosine_similarity_matrix = np.dot(normalized_A, normalized_B.T)
-
-    # Get the highest cosine similarity indices and values
-    highest_cosine_values = np.max(cosine_similarity_matrix, axis=1)
-    highest_cosine_indices = np.argmax(cosine_similarity_matrix, axis=1)
-
-    return highest_cosine_indices, highest_cosine_values
-
-
-# In[ ]:
-
-
-highest_cosine_indices, highest_cosine_values = find_all_highest_cosine_similarities(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy())
-
-
-# In[ ]:
-
-
-highest_cosine_values
-
-
-# In[ ]:
-
-
-sum(highest_cosine_values) / len(highest_cosine_values)
-
-
-# In[ ]:
-
-
-len(highest_cosine_indices)
-
-
-# In[ ]:
-
-
-mlp_weights
-
-
-# In[ ]:
-
-
-import torch
-learned_norm = torch.nn.functional.normalize(torch.from_numpy(mlp_weights), p=2, dim=0)
-ground_truth_norm = torch.nn.functional.normalize(torch.from_numpy(mlp_weights_2), p=2, dim=0)
-cos_sims = torch.matmul(learned_norm, ground_truth_norm.t())
-highest_cosine_values_v2, highest_cosine_indices_v2 = cos_sims.max(dim=0)
-
-
-# In[ ]:
-
-
-highest_cosine_indices_v2.shape
-
-
-# In[ ]:
-
-
-highest_cosine_indices_v2 = highest_cosine_indices_v2.cpu().numpy()
-
-
-# ## metrics on cos sim paired
-
-# In[ ]:
-
-
-svcca(mlp_weights.detach().numpy()[highest_cosine_indices], mlp_weights_2.detach().numpy(), "nd")
-
-
-# In[ ]:
-
-
-jaccard_similarity(mlp_weights.detach().numpy()[highest_cosine_indices], mlp_weights_2.detach().numpy())
-
-
-# In[ ]:
-
-
-representational_similarity_analysis(mlp_weights.detach().numpy()[highest_cosine_indices], mlp_weights_2.detach().numpy(), "nd")
-
-
-# In[ ]:
-
-
-
+    `batched_correlation(reshaped_activations_B, reshaped_activations_A)` : highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals. Use the list with smaller number of features (cols) as the second arg
+    """
+    highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_B, reshaped_activations_A)
+    highest_correlations_indices_AB = highest_correlations_indices_AB.cpu().numpy()
+    highest_correlations_values_AB = highest_correlations_values_AB.cpu().numpy()
+
+    # num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
+    # print(num_unq_pairs)
+    # num_unq_pairs / len(highest_correlations_indices_AB)
+
+    dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+    # plt.hist(highest_correlations_values_AB)
+    # plt.show()
+
+    ###########
+    # sim tests
+
+    dictscores["jaccard_paired"] = jaccard_similarity(weight_matrix_np, weight_matrix_2[highest_correlations_indices_AB])
+    # jacc_paired
+
+    dictscores["jaccard_unpaired"] = jaccard_similarity(weight_matrix_np, weight_matrix_2)
+    # jacc_unpaired
+    # # this takes too long, so just do 1 to 3 runs
+    # num_feats = len(highest_correlations_indices_AB)
+    # jacc_unpaired = score_rand(num_feats, jaccard_similarity, shapereq_bool=False)
+
+    dictscores["svcca_paired"] = svcca(weight_matrix_np, weight_matrix_2[highest_correlations_indices_AB], "nd")
+    # svcca_paired
+
+    dictscores["svcca_unpaired"] = svcca(weight_matrix_np, weight_matrix_2, "nd")
+    # svcca_unpaired
+    # num_feats = len(highest_correlations_indices_AB)
+    # svcca_unpaired = score_rand(num_feats, svcca, shapereq_bool=True)
+
+    print("Layer: " + str(i))
+    for key, value in dictscores.items():
+        print(key + ": " + str(value))
+    print("\n")
+
+    layer_to_dictscores[i] = dictscores
+
+    # print("Jaccard paired: ", jacc_paired)
+    # print("Jaccard unpaired: ", jacc_unpaired)
+    # print("\n")
+    # print("SVCCA paired: ", svcca_paired)
+    # print("SVCCA unpaired: ", svcca_unpaired)
 

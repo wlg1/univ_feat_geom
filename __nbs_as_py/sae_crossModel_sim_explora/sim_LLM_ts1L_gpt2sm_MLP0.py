@@ -3,7 +3,7 @@
 
 # # Setup
 
-# In[ ]:
+# In[1]:
 
 
 from google.colab import drive
@@ -12,13 +12,13 @@ import shutil
 drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[2]:
 
 
 get_ipython().run_cell_magic('capture', '', 'try:\n    #import google.colab # type: ignore\n    #from google.colab import output\n    %pip install transformer-lens\nexcept:\n    from IPython import get_ipython # type: ignore\n    ipython = get_ipython(); assert ipython is not None\n    ipython.run_line_magic("load_ext", "autoreload")\n    ipython.run_line_magic("autoreload", "2")\n')
 
 
-# In[ ]:
+# In[3]:
 
 
 from transformer_lens import HookedTransformer
@@ -48,13 +48,13 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # # change input params here
 
-# In[ ]:
+# In[4]:
 
 
 model_name = "tiny-stories-1L-21M"
-model_name_2 = "tiny-stories-2L-33M"
+model_name_2 = "gpt2-small"
 short_model_name = 'ts_1L_21M'
-short_model_name_2 = 'ts_2L_33M'
+short_model_name_2 = 'gpt2sm'
 layer_name = "blocks.0.hook_mlp_out"
 
 save_data_fn = 'batch_tokens_anySamps_v1.pkl'
@@ -66,13 +66,13 @@ acts_save_path_2 = 'LLMacts_' + short_model_name_2 + '_anySamps_v1.pkl'
 
 # # load models
 
-# In[ ]:
+# In[5]:
 
 
 model = HookedTransformer.from_pretrained(model_name)
 
 
-# In[ ]:
+# In[6]:
 
 
 model_2 = HookedTransformer.from_pretrained(model_name_2)
@@ -80,27 +80,27 @@ model_2 = HookedTransformer.from_pretrained(model_name_2)
 
 # ## load weights
 
-# In[ ]:
+# In[7]:
 
 
-model.transformer.h[0].mlp
+model_2.blocks[0].mlp
 
 
-# In[ ]:
+# In[8]:
 
 
 from transformers import AutoModelForCausalLM
 
 model_hf = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-1Layer-21M")
-mlp_weights = model.transformer.h[0].mlp.c_proj.weight
+mlp_weights = model_hf.transformer.h[0].mlp.c_proj.weight
 mlp_weights.shape
 
 
-# In[ ]:
+# In[10]:
 
 
-model_2_hf = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-2Layers-33M")
-mlp_weights_2 = model_2.transformer.h[0].mlp.c_proj.weight
+model_2_hf = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+mlp_weights_2 = model_2_hf.transformer.h[0].mlp.c_proj.weight
 mlp_weights_2.shape
 
 
@@ -154,31 +154,38 @@ shutil.copy(source_path, destination_path) # Copy the file
 
 # ## load selected data
 
-# In[ ]:
+# In[11]:
 
 
 # check if saved
-file_path = '/content/drive/MyDrive/' + save_data_fn
+file_path = '/content/drive/MyDrive/sae_files/' + save_data_fn
 with open(file_path, 'rb') as f:
     batch_tokens = pickle.load(f)
 
 
-# In[ ]:
+# In[12]:
 
 
 batch_tokens.shape
 
 
+# In[13]:
+
+
+batch_tokens = batch_tokens[:100]
+batch_tokens.shape
+
+
 # # get LLM actvs
 
-# In[ ]:
+# In[14]:
 
 
 h_store = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model.cfg.d_model), device=model.cfg.device)
 h_store.shape
 
 
-# In[ ]:
+# In[15]:
 
 
 def store_h_hook(
@@ -188,7 +195,7 @@ def store_h_hook(
     h_store[:] = pattern  # this works b/c changes values, not replaces entire thing
 
 
-# In[ ]:
+# In[16]:
 
 
 model.run_with_hooks(
@@ -200,13 +207,7 @@ model.run_with_hooks(
 )
 
 
-# In[ ]:
-
-
-h_store[:3, :3, :3]
-
-
-# In[ ]:
+# In[17]:
 
 
 h_store_2 = torch.zeros((batch_tokens.shape[0], batch_tokens.shape[1], model_2.cfg.d_model), device=model_2.cfg.device)
@@ -217,13 +218,19 @@ def store_h_hook_2(
     h_store_2[:] = pattern  # this works b/c changes values, not replaces entire thing
 
 model_2.run_with_hooks(
-    batch_tokens,
+    batch_tokens[:100],
     return_type = None,
     fwd_hooks=[
         (layer_name, store_h_hook_2),
     ]
 )
 h_store_2[:3, :3, :3]
+
+
+# In[18]:
+
+
+h_store_2.shape
 
 
 # ## save actvs
@@ -267,7 +274,7 @@ with open(file_path, 'rb') as f:
 
 # ## reshape for corr
 
-# In[ ]:
+# In[19]:
 
 
 first_dim_reshaped = h_store.shape[0] * h_store.shape[1]
@@ -275,10 +282,16 @@ reshaped_activations_A = h_store.reshape(first_dim_reshaped, h_store.shape[-1]).
 reshaped_activations_B = h_store_2.reshape(first_dim_reshaped, h_store_2.shape[-1]).cpu()
 
 
-# In[ ]:
+# In[20]:
 
 
 reshaped_activations_A.shape
+
+
+# In[21]:
+
+
+reshaped_activations_B.shape
 
 
 # # neuron corr by actvs
@@ -320,57 +333,88 @@ def find_all_highest_correlations(reshaped_activations_A, reshaped_activations_B
     return highest_correlations_indices, highest_correlations_values
 
 
+# In[22]:
+
+
+def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
+    # Ensure tensors are on GPU
+    if torch.cuda.is_available():
+        reshaped_activations_A = reshaped_activations_A.to('cuda')
+        reshaped_activations_B = reshaped_activations_B.to('cuda')
+
+    # Normalize columns of A
+    mean_A = reshaped_activations_A.mean(dim=0, keepdim=True)
+    std_A = reshaped_activations_A.std(dim=0, keepdim=True)
+    normalized_A = (reshaped_activations_A - mean_A) / (std_A + 1e-8)  # Avoid division by zero
+
+    # Normalize columns of B
+    mean_B = reshaped_activations_B.mean(dim=0, keepdim=True)
+    std_B = reshaped_activations_B.std(dim=0, keepdim=True)
+    normalized_B = (reshaped_activations_B - mean_B) / (std_B + 1e-8)  # Avoid division by zero
+
+    num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
+    max_values = []
+    max_indices = []
+
+    for batch in range(num_batches):
+        start = batch * batch_size
+        end = min(start + batch_size, normalized_B.shape[1])
+        batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
+        max_val, max_idx = batch_corr_matrix.max(dim=0)
+        max_values.append(max_val)
+        # max_indices.append(max_idx + start)  # Adjust indices for the batch offset
+        max_indices.append(max_idx)  # Adjust indices for the batch offset
+
+        del batch_corr_matrix
+        torch.cuda.empty_cache()
+
+    return torch.cat(max_indices), torch.cat(max_values)
+
+
 # ## test
 
-# In[ ]:
+# highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals
+
+# In[51]:
 
 
-highest_correlations_indices, highest_correlations_values = find_all_highest_correlations(reshaped_activations_A, reshaped_activations_B)
+# dont do this as we need the smaller one to be in SECOND?
+# highest_correlations_indices, highest_correlations_values = batched_correlation(reshaped_activations_A, reshaped_activations_B)  # this gives 768
+highest_correlations_indices, highest_correlations_values = batched_correlation(reshaped_activations_B, reshaped_activations_A) # this gives 1024
 print(f'Highest correlations indices: {highest_correlations_indices}')
 print(f'Highest correlations values: {highest_correlations_values}')
 
 
-# In[ ]:
+# In[52]:
 
 
 len(highest_correlations_indices)
 
 
-# In[ ]:
+# In[25]:
 
 
 len(list(set(highest_correlations_indices)))
 
 
-# In[ ]:
+# In[26]:
 
 
 sum(highest_correlations_values) / len(highest_correlations_values)
 
 
-# ## compare to SAE corrs
-
-# In[ ]:
+# In[55]:
 
 
-import pickle
-# with open('highest_corr_inds_1L_2L_MLP0_16k_30k_relu.pkl', 'rb') as f:
-#     highest_correlations_indices_saes = pickle.load(f)
-with open('highest_corr_vals_1L_2L_MLP0_16k_30k_relu.pkl', 'rb') as f:
-    highest_correlations_values_saes = pickle.load(f)
-
-
-# In[ ]:
-
-
-sum(highest_correlations_values_saes) / len(highest_correlations_values_saes)
+highest_correlations_indices = highest_correlations_indices.cpu().detach().numpy()
+highest_correlations_values = highest_correlations_values.cpu().detach().numpy()
 
 
 # # svcca
 
 # ## fns
 
-# In[ ]:
+# In[27]:
 
 
 import functools
@@ -697,7 +741,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[ ]:
+# In[28]:
 
 
 ##################################################################################
@@ -1288,31 +1332,67 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## compare
 
-# In[ ]:
+# In[29]:
 
 
 mlp_weights.shape
 
 
-# In[ ]:
+# In[31]:
 
 
-svcca(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy(), "nd")
+mlp_weights_2.shape
+
+
+# In[33]:
+
+
+len(mlp_weights)
+
+
+# In[32]:
+
+
+svcca(mlp_weights.detach().numpy(), mlp_weights_2[:len(mlp_weights)].detach().numpy(), "nd")
+
+
+# ## rand
+
+# In[42]:
+
+
+all_rand_scores = []
+num_feats = len(mlp_weights)
+for i in range(10):
+    rand_modA_feats = np.random.randint(low=0, high=mlp_weights.detach().numpy().shape[0], size=num_feats).tolist()
+    rand_modB_feats = np.random.randint(low=0, high=mlp_weights_2.detach().numpy().shape[0], size=num_feats).tolist()
+
+    score = svcca(mlp_weights.detach().numpy()[rand_modA_feats], mlp_weights_2.detach().numpy()[rand_modB_feats], "nd")
+    all_rand_scores.append(score)
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# In[43]:
+
+
+from matplotlib import pyplot as plt
+plt.hist(all_rand_scores)
+plt.show()
 
 
 # ## compare by align actv corr
 
-# In[ ]:
+# In[40]:
 
 
-svcca(mlp_weights.detach().numpy()[highest_correlations_indices], mlp_weights_2.detach().numpy(), "nd")
+svcca(mlp_weights.detach().numpy(), mlp_weights_2[highest_correlations_indices].detach().numpy(), "nd")
 
 
 # # jaccard MNN
 
 # ## fns
 
-# In[ ]:
+# In[44]:
 
 
 import functools
@@ -1418,7 +1498,7 @@ class Pipeline:
         )
 
 
-# In[ ]:
+# In[45]:
 
 
 from typing import List, Set, Union
@@ -1477,35 +1557,53 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
 
 # ## entire space
 
-# In[ ]:
+# In[46]:
 
 
 mlp_weights.shape
 
 
-# In[ ]:
+# In[47]:
 
 
 jaccard_similarity(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy())
 
 
-# In[ ]:
-
-
-jaccard_similarity(mlp_weights.detach().numpy()[highest_correlations_indices], mlp_weights_2.detach().numpy())
-
-
-# In[ ]:
+# In[56]:
 
 
 jaccard_similarity(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy()[highest_correlations_indices])
+
+
+# ## rand
+
+# In[57]:
+
+
+all_rand_scores = []
+num_feats = len(mlp_weights)
+for i in range(10):
+    rand_modA_feats = np.random.randint(low=0, high=mlp_weights.detach().numpy().shape[0], size=num_feats).tolist()
+    rand_modB_feats = np.random.randint(low=0, high=mlp_weights_2.detach().numpy().shape[0], size=num_feats).tolist()
+
+    score = jaccard_similarity(mlp_weights.detach().numpy()[rand_modA_feats], mlp_weights_2.detach().numpy()[rand_modB_feats])
+    all_rand_scores.append(score)
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# In[58]:
+
+
+from matplotlib import pyplot as plt
+plt.hist(all_rand_scores)
+plt.show()
 
 
 # # RSA
 
 # ## fns
 
-# In[ ]:
+# In[59]:
 
 
 from typing import Optional
@@ -1598,120 +1696,63 @@ class RSA(RSMSimilarityMeasure):
 
 # ## all decoder weights
 
-# In[ ]:
+# In[66]:
 
 
-representational_similarity_analysis(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy(), "nd")
+representational_similarity_analysis(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy()[:len(mlp_weights)], "nd")
 
 
-# In[ ]:
+# In[61]:
 
 
-representational_similarity_analysis(mlp_weights.detach().numpy()[highest_correlations_indices], mlp_weights_2.detach().numpy(), "nd")
+representational_similarity_analysis(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy()[highest_correlations_indices], "nd")
 
 
-# # align perm by cosine sim
+# In[69]:
 
-# ## fn
 
-# In[ ]:
+len(highest_correlations_indices)
 
 
-import numpy as np
+# ## rand
 
-def find_all_highest_cosine_similarities(reshaped_activations_A, reshaped_activations_B):
-    # Normalize rows of A (each vector) for cosine similarity
-    norms_A = np.linalg.norm(reshaped_activations_A, axis=1, keepdims=True)
-    normalized_A = reshaped_activations_A / (norms_A + 1e-8)  # Avoid division by zero
+# In[70]:
 
-    # Normalize rows of B (each vector) for cosine similarity
-    norms_B = np.linalg.norm(reshaped_activations_B, axis=1, keepdims=True)
-    normalized_B = reshaped_activations_B / (norms_B + 1e-8)  # Avoid division by zero
 
-    # Compute cosine similarity matrix
-    cosine_similarity_matrix = np.dot(normalized_A, normalized_B.T)
+len(mlp_weights)
 
-    # Get the highest cosine similarity indices and values
-    highest_cosine_values = np.max(cosine_similarity_matrix, axis=1)
-    highest_cosine_indices = np.argmax(cosine_similarity_matrix, axis=1)
 
-    return highest_cosine_indices, highest_cosine_values
+# In[77]:
 
 
-# In[ ]:
+all_rand_scores = []
+num_feats = len(mlp_weights)
+for i in range(50):
+    rand_modA_feats = np.random.randint(low=0, high=mlp_weights.detach().numpy().shape[0], size=num_feats).tolist()
+    rand_modB_feats = np.random.randint(low=0, high=mlp_weights_2.detach().numpy().shape[0], size=num_feats).tolist()
 
+    score = representational_similarity_analysis(mlp_weights.detach().numpy()[rand_modA_feats], mlp_weights_2.detach().numpy()[rand_modB_feats], "nd")
+    all_rand_scores.append(score)
+sum(all_rand_scores) / len(all_rand_scores)
 
-highest_cosine_indices, highest_cosine_values = find_all_highest_cosine_similarities(mlp_weights.detach().numpy(), mlp_weights_2.detach().numpy())
 
+# In[78]:
 
-# In[ ]:
 
+from matplotlib import pyplot as plt
+plt.hist(all_rand_scores)
+plt.show()
 
-highest_cosine_values
 
+# In[73]:
 
-# In[ ]:
 
+representational_similarity_analysis(mlp_weights.detach().numpy()[rand_modA_feats], mlp_weights_2.detach().numpy()[highest_correlations_indices], "nd")
 
-sum(highest_cosine_values) / len(highest_cosine_values)
 
+# In[76]:
 
-# In[ ]:
 
-
-len(highest_cosine_indices)
-
-
-# In[ ]:
-
-
-mlp_weights
-
-
-# In[ ]:
-
-
-import torch
-learned_norm = torch.nn.functional.normalize(torch.from_numpy(mlp_weights), p=2, dim=0)
-ground_truth_norm = torch.nn.functional.normalize(torch.from_numpy(mlp_weights_2), p=2, dim=0)
-cos_sims = torch.matmul(learned_norm, ground_truth_norm.t())
-highest_cosine_values_v2, highest_cosine_indices_v2 = cos_sims.max(dim=0)
-
-
-# In[ ]:
-
-
-highest_cosine_indices_v2.shape
-
-
-# In[ ]:
-
-
-highest_cosine_indices_v2 = highest_cosine_indices_v2.cpu().numpy()
-
-
-# ## metrics on cos sim paired
-
-# In[ ]:
-
-
-svcca(mlp_weights.detach().numpy()[highest_cosine_indices], mlp_weights_2.detach().numpy(), "nd")
-
-
-# In[ ]:
-
-
-jaccard_similarity(mlp_weights.detach().numpy()[highest_cosine_indices], mlp_weights_2.detach().numpy())
-
-
-# In[ ]:
-
-
-representational_similarity_analysis(mlp_weights.detach().numpy()[highest_cosine_indices], mlp_weights_2.detach().numpy(), "nd")
-
-
-# In[ ]:
-
-
-
+rand_modA_feats = np.random.randint(low=0, high=mlp_weights.detach().numpy().shape[0], size=num_feats).tolist()
+representational_similarity_analysis(mlp_weights.detach().numpy()[rand_modA_feats], mlp_weights_2.detach().numpy()[highest_correlations_indices], "nd")
 
