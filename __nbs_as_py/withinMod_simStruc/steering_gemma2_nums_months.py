@@ -1362,6 +1362,11 @@ sae.cuda()
 
 """# test prompts"""
 
+prompt = "thirteen fourteen fifteen sixteen "
+inputs = tokenizer.encode(prompt, return_tensors="pt", add_special_tokens=True).to("cuda")
+outputs = model.generate(input_ids=inputs, max_new_tokens=1)
+print(tokenizer.decode(outputs[0, -1]))
+
 prompt = "one two three four"
 inputs = tokenizer.encode(prompt, return_tensors="pt", add_special_tokens=True).to("cuda")
 outputs = model.generate(input_ids=inputs, max_new_tokens=1)
@@ -2837,5 +2842,31 @@ steer_by_sae_lastTok(prompt, steer_vec, multp)
 prompt = "I AM A CAT"
 steer_vec = mean_num_sv
 multp = 1
+steer_by_sae_lastTok(prompt, steer_vec, multp)
+
+"""## mod 10"""
+
+#
+prompt = "thirteen fourteen fifteen sixteen "
+steer_vec = mean_num_sv
+multp = 0
+steer_by_sae_lastTok(prompt, steer_vec, multp)
+
+#
+prompt = "seven eight nine ten eleven"
+steer_vec = mean_num_sv
+multp = 0
+steer_by_sae_lastTok(prompt, steer_vec, multp)
+
+#
+prompt = "seven eight nine ten eleven"
+steer_vec = mean_num_sv
+multp = 1.5
+steer_by_sae_lastTok(prompt, steer_vec, multp)
+
+#
+prompt = "six seven eight nine ten eleven twelve"
+steer_vec = mean_num_sv
+multp = 0
 steer_by_sae_lastTok(prompt, steer_vec, multp)
 
