@@ -3,27 +3,27 @@
 
 # # setup
 
-# In[ ]:
+# In[1]:
 
 
 import logging
 logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
 
 
-# In[ ]:
+# In[2]:
 
 
 # from google.colab import drive
 # drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[3]:
 
 
 get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
 
 
-# In[ ]:
+# In[4]:
 
 
 # you should load this before cloning repo files
@@ -35,7 +35,7 @@ from sae.utils import decoder_impl
 from sae import Sae
 
 
-# In[ ]:
+# In[5]:
 
 
 import gc
@@ -58,7 +58,7 @@ from safetensors.torch import load_model, save_model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# In[ ]:
+# In[6]:
 
 
 from collections import Counter
@@ -66,9 +66,78 @@ from collections import Counter
 
 # ## corr fns
 
-# In[ ]:
+# In[7]:
 
 
+def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
+    # Ensure tensors are on GPU
+    # if torch.cuda.is_available():
+    #     reshaped_activations_A = reshaped_activations_A.to('cuda')
+    #     reshaped_activations_B = reshaped_activations_B.to('cuda')
+
+    normalized_A = normalize_byChunks(reshaped_activations_A, chunk_size=10000)
+    normalized_B = normalize_byChunks(reshaped_activations_B, chunk_size=10000)
+
+    if torch.cuda.is_available():
+        normalized_A = normalized_A.to('cuda')
+        normalized_B = normalized_B.to('cuda')
+
+    num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
+    max_values = []
+    max_indices = []
+    full_corr_matrix = []
+
+    for batch in range(num_batches):
+        start = batch * batch_size
+        end = min(start + batch_size, normalized_B.shape[1])
+
+        batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
+        full_corr_matrix.append(batch_corr_matrix.cpu())  # Append to the list and move to CPU to save GPU memory
+
+        max_val, max_idx = batch_corr_matrix.max(dim=0)
+        max_values.append(max_val)
+        max_indices.append(max_idx)  # Adjust indices for the batch offset
+
+        del batch_corr_matrix
+        torch.cuda.empty_cache()
+    full_corr_matrix = torch.cat(full_corr_matrix, dim=1)
+
+    # return torch.cat(max_indices), torch.cat(max_values)
+    return full_corr_matrix, torch.cat(max_indices).cpu().numpy(), torch.cat(max_values).cpu().numpy()
+
+
+# In[8]:
+
+
+# def get_corr_mat(reshaped_activations_A, reshaped_activations_B, batch_size=100):
+#     normalized_A = normalize_byChunks(reshaped_activations_A, chunk_size=10000)
+#     normalized_B = normalize_byChunks(reshaped_activations_B, chunk_size=10000)
+
+#     if torch.cuda.is_available():
+#         normalized_A = normalized_A.to('cuda')
+#         normalized_B = normalized_B.to('cuda')
+
+#     num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
+#     full_corr_matrix = []
+
+#     for batch in range(num_batches):
+#         start = batch * batch_size
+#         end = min(start + batch_size, normalized_B.shape[1])
+
+#         batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
+#         full_corr_matrix.append(batch_corr_matrix.cpu())  # Append to the list and move to CPU to save GPU memory
+
+#         del batch_corr_matrix
+#         torch.cuda.empty_cache()
+#     full_corr_matrix = torch.cat(full_corr_matrix, dim=1)
+
+#     return full_corr_matrix
+
+
+# In[9]:
+
+
+# use numpy bc torch vars take up more memory
 def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of rows per chunk
     mean_A = actv_tensor.mean(dim=0, keepdim=True)
     std_A = actv_tensor.std(dim=0, keepdim=True)
@@ -94,47 +163,119 @@ def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of r
     return torch.tensor(normalized_A)
 
 
-# In[ ]:
+# ## failed corr fns
+
+# In[10]:
 
 
-def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
-    # Ensure tensors are on GPU
-    # if torch.cuda.is_available():
-    #     reshaped_activations_A = reshaped_activations_A.to('cuda')
-    #     reshaped_activations_B = reshaped_activations_B.to('cuda')
+# def batched_correlation_mask(reshaped_activations_A, reshaped_activations_B, batch_size=100):
+#     normalized_A = normalize_byChunks(reshaped_activations_A, chunk_size=10000)
+#     normalized_B = normalize_byChunks(reshaped_activations_B, chunk_size=10000)
 
+#     if torch.cuda.is_available():
+#         normalized_A = normalized_A.to('cuda')
+#         normalized_B = normalized_B.to('cuda')
+
+#     num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
+#     max_values = []
+#     max_indices = []
+#     used_indices_A = torch.zeros(normalized_A.shape[1], dtype=torch.bool, device='cuda')
+
+#     for batch in range(num_batches):
+#         if batch % 50 == 0:
+#             print(batch, num_batches)
+#         start = batch * batch_size
+#         end = min(start + batch_size, normalized_B.shape[1])
+#         batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
+
+#         # Mask out already used indices
+#         batch_corr_matrix[used_indices_A, :] = -float('inf')
+
+#         # Find max values and their indices in the batch
+#         max_val, max_idx = batch_corr_matrix.max(dim=0)
+#         max_values.append(max_val)
+#         max_indices.append(max_idx)  # Correct indices for the batch offset
+
+#         # Mark indices as used
+#         used_indices_A[max_idx] = True
+
+#         # Cleanup to save memory
+#         del batch_corr_matrix
+#         torch.cuda.empty_cache()
+
+#     return torch.cat(max_indices).cpu().numpy(), torch.cat(max_values).cpu().numpy()
+
+
+# In[11]:
+
+
+import torch
+
+def greedy_match_and_values(cost_matrix):
+    num_cols = cost_matrix.shape[1]
+    match_indices = torch.zeros(num_cols, dtype=torch.long, device=cost_matrix.device)
+    max_values = torch.zeros(num_cols, device=cost_matrix.device)
+
+    for i in range(num_cols):
+        # Find the index of the maximum value in the column
+        if i % 5000 == 0:
+            print(i, num_cols)
+        max_val, row_index = cost_matrix[:, i].max(dim=0)
+        match_indices[i] = row_index
+        max_values[i] = max_val
+
+        # Invalidate this row to prevent its reuse
+        cost_matrix[row_index, :] = -float('inf')
+
+    return match_indices, max_values
+
+
+# In[12]:
+
+
+import torch
+from scipy.optimize import linear_sum_assignment
+
+def get_corr_1to1(reshaped_activations_A, reshaped_activations_B, batch_size=100):
     normalized_A = normalize_byChunks(reshaped_activations_A, chunk_size=10000)
     normalized_B = normalize_byChunks(reshaped_activations_B, chunk_size=10000)
-
     if torch.cuda.is_available():
         normalized_A = normalized_A.to('cuda')
         normalized_B = normalized_B.to('cuda')
 
     num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
-    max_values = []
-    max_indices = []
+    full_corr_matrix = []
 
     for batch in range(num_batches):
+        # if batch % 50 == 0:
+        #     print(batch, num_batches)
         start = batch * batch_size
-        # if start % 5000 == 0:
-        #     print(start)
         end = min(start + batch_size, normalized_B.shape[1])
-
+        # Compute correlation matrix for the current batch
         batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
-        max_val, max_idx = batch_corr_matrix.max(dim=0)
-        max_values.append(max_val)
-        max_indices.append(max_idx)  # Adjust indices for the batch offset
+        full_corr_matrix.append(batch_corr_matrix.cpu())  # Append to the list and move to CPU to save GPU memory
 
-        del batch_corr_matrix
-        torch.cuda.empty_cache()
+    # Concatenate all batches to form the full correlation matrix
+    full_corr_matrix = torch.cat(full_corr_matrix, dim=1)
 
-    # return torch.cat(max_indices), torch.cat(max_values)
-    return torch.cat(max_indices).cpu().numpy(), torch.cat(max_values).cpu().numpy()
+    # # Convert to numpy and apply the Hungarian algorithm
+    # cost_matrix = -full_corr_matrix.numpy()  # Convert because the algorithm finds the minimum
+    # row_ind, col_ind = linear_sum_assignment(cost_matrix)
+    # # Extract the maximum correlations and their indices
+    # max_indices = col_ind
+    # max_values = -cost_matrix[row_ind, col_ind]  # Convert back to positive values
+    # return max_indices, max_values
+
+    print('start match')
+    cost_matrix = -full_corr_matrix  # Assuming full_corr_matrix is already computed and on GPU
+    match_indices, match_values = greedy_match_and_values(cost_matrix)
+    match_values = -match_values
+    return match_indices, match_values
 
 
 # ## sim fns
 
-# In[ ]:
+# In[13]:
 
 
 import functools
@@ -240,7 +381,7 @@ class Pipeline:
         )
 
 
-# In[ ]:
+# In[14]:
 
 
 from typing import List, Set, Union
@@ -297,7 +438,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[ ]:
+# In[15]:
 
 
 import functools
@@ -624,7 +765,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[ ]:
+# In[16]:
 
 
 import scipy.optimize
@@ -646,7 +787,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[ ]:
+# In[17]:
 
 
 from typing import Optional
@@ -737,7 +878,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[ ]:
+# In[18]:
 
 
 ##################################################################################
@@ -1328,7 +1469,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[ ]:
+# In[19]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1348,7 +1489,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[ ]:
+# In[20]:
 
 
 # import random
@@ -1359,7 +1500,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
 
 # ## plot fns
 
-# In[ ]:
+# In[21]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
@@ -1410,7 +1551,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[22]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
@@ -1461,7 +1602,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[23]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
@@ -1512,7 +1653,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[24]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
@@ -1549,7 +1690,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[25]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
@@ -1586,7 +1727,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[26]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1638,7 +1779,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[ ]:
+# In[27]:
 
 
 def highest_activating_tokens(
@@ -1666,7 +1807,7 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
 
 
-# In[ ]:
+# In[28]:
 
 
 from rich import print as rprint
@@ -1694,7 +1835,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
 
 # ## get llm actv fns
 
-# In[ ]:
+# In[29]:
 
 
 from torch.utils.data import DataLoader, TensorDataset
@@ -1729,7 +1870,7 @@ def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
 
 # ## get sae actv fns
 
-# In[ ]:
+# In[30]:
 
 
 # def get_weights_and_acts(name, cfg_dict, layer_id, outputs):
@@ -1779,7 +1920,7 @@ def get_weights_and_acts(name, layer_id, outputs):
     return weight_matrix_np, reshaped_activations_A
 
 
-# In[ ]:
+# In[31]:
 
 
 def get_weights_and_acts_byLayer(name, layer_id, outputs):
@@ -1800,7 +1941,7 @@ def get_weights_and_acts_byLayer(name, layer_id, outputs):
     return weight_matrix_np, reshaped_activations_A
 
 
-# In[ ]:
+# In[32]:
 
 
 def count_zero_columns(tensor):
@@ -1813,7 +1954,7 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[ ]:
+# In[33]:
 
 
 def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
@@ -1915,7 +2056,7 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
 
 # # load data
 
-# In[ ]:
+# In[35]:
 
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -1924,7 +2065,7 @@ tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
 tokenizer.pad_token = tokenizer.eos_token
 
 
-# In[ ]:
+# In[36]:
 
 
 from datasets import load_dataset
@@ -1932,7 +2073,7 @@ from datasets import load_dataset
 dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
 
 
-# In[ ]:
+# In[37]:
 
 
 batch_size = 100
@@ -1957,7 +2098,7 @@ inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, ma
 
 # # load models
 
-# In[ ]:
+# In[38]:
 
 
 model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m")
@@ -1966,20 +2107,18 @@ model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-160m")
 
 # ## get LLM actvs
 
-# In[ ]:
+# In[39]:
 
 
 with torch.inference_mode():
-    # outputs = model(**inputs, output_hidden_states=True)
+    outputs = model(**inputs, output_hidden_states=True)
     outputs_2 = model_2(**inputs, output_hidden_states=True)
 
     # outputs = get_llm_actvs_batch(model, inputs, batch_size=100, maxseqlen=300)
     # outputs_2 = get_llm_actvs_batch(model_2, inputs, batch_size=100, maxseqlen=300)
 
 
-# # MLP 3
-
-# loop- 1-1
+# # bad mask approach 1
 
 # In[ ]:
 
@@ -1989,6 +2128,1022 @@ layer_id = 3
 with torch.inference_mode():
     outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
 
+
+# In[ ]:
+
+
+name = "EleutherAI/sae-pythia-70m-32k"
+hookpoint = "layers." + str(layer_id)
+sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+
+weight_matrix_np = sae.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    reshaped_activations_A = sae.pre_acts(outputs.to("cuda"))
+    # reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+    # orig = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+
+first_dim_reshaped = reshaped_activations_A.shape[0] * reshaped_activations_A.shape[1]
+reshaped_activations_A = reshaped_activations_A.reshape(first_dim_reshaped, reshaped_activations_A.shape[-1]).cpu()
+
+
+# In[ ]:
+
+
+name = "EleutherAI/sae-pythia-160m-32k"
+layer_id2 = 5
+
+hookpoint = "layers." + str(layer_id2)
+sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    # outputs = model_2(**inputs, output_hidden_states=True)
+    reshaped_activations_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id].to("cuda"))
+
+first_dim_reshaped = reshaped_activations_B.shape[0] * reshaped_activations_B.shape[1]
+reshaped_activations_B = reshaped_activations_B.reshape(first_dim_reshaped, reshaped_activations_B.shape[-1]).cpu()
+
+
+# In[ ]:
+
+
+highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation_mask(reshaped_activations_A, reshaped_activations_B)
+
+num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
+print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
+
+sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+
+
+# In[ ]:
+
+
+plt.hist(highest_correlations_values_AB)
+plt.show()
+
+
+# In[ ]:
+
+
+len(highest_correlations_indices_AB)
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[highest_correlations_indices_AB], weight_matrix_2, "nd")
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np, weight_matrix_2, "nd")
+
+
+# In[ ]:
+
+
+new_highest_correlations_indices_A = []
+new_highest_correlations_indices_B = []
+new_highest_correlations_values = []
+
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    val = highest_correlations_values_AB[ind_B]
+    if val > 0.2:
+        new_highest_correlations_indices_A.append(ind_A)
+        new_highest_correlations_indices_B.append(ind_B)
+        new_highest_correlations_values.append(val)
+
+num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
+print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
+print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
+sum(new_highest_correlations_values) / len(new_highest_correlations_values)
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+
+
+# In[ ]:
+
+
+new_highest_correlations_indices_A = []
+new_highest_correlations_indices_B = []
+new_highest_correlations_values = []
+
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    val = highest_correlations_values_AB[ind_B]
+    if val > 0.3:
+        new_highest_correlations_indices_A.append(ind_A)
+        new_highest_correlations_indices_B.append(ind_B)
+        new_highest_correlations_values.append(val)
+
+num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
+print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
+print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
+sum(new_highest_correlations_values) / len(new_highest_correlations_values)
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+
+
+# In[ ]:
+
+
+new_highest_correlations_indices_A = []
+new_highest_correlations_indices_B = []
+new_highest_correlations_values = []
+
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    val = highest_correlations_values_AB[ind_B]
+    if val > 0.4:
+        new_highest_correlations_indices_A.append(ind_A)
+        new_highest_correlations_indices_B.append(ind_B)
+        new_highest_correlations_values.append(val)
+
+num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
+print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
+print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
+sum(new_highest_correlations_values) / len(new_highest_correlations_values)
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+
+
+# In[ ]:
+
+
+new_highest_correlations_indices_A = []
+new_highest_correlations_indices_B = []
+new_highest_correlations_values = []
+
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    val = highest_correlations_values_AB[ind_B]
+    if val > 0.5:
+        new_highest_correlations_indices_A.append(ind_A)
+        new_highest_correlations_indices_B.append(ind_B)
+        new_highest_correlations_values.append(val)
+
+num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
+print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
+print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
+sum(new_highest_correlations_values) / len(new_highest_correlations_values)
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+
+
+# In[ ]:
+
+
+new_highest_correlations_indices_A = []
+new_highest_correlations_indices_B = []
+new_highest_correlations_values = []
+
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    val = highest_correlations_values_AB[ind_B]
+    if val > 0.9:
+        new_highest_correlations_indices_A.append(ind_A)
+        new_highest_correlations_indices_B.append(ind_B)
+        new_highest_correlations_values.append(val)
+
+num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
+print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
+print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
+sum(new_highest_correlations_values) / len(new_highest_correlations_values)
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+
+
+# In[ ]:
+
+
+sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
+kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 10]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    if ind_A in kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+    elif ind_A not in seen:  # only keep one if it's over count X
+        seen.add(ind_A)
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+num_unq_pairs = len(list(set(filt_corr_ind_A)))
+print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+print("num feats after filt: ", len(filt_corr_ind_A))
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
+
+
+# # only match many-to-1 afterwards
+
+# ## get sae actvs
+
+# In[40]:
+
+
+layer_id = 2
+
+# with torch.inference_mode():
+#     outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[41]:
+
+
+name = "EleutherAI/sae-pythia-70m-32k"
+hookpoint = "layers." + str(layer_id)
+sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+
+weight_matrix_np = sae.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    # reshaped_activations_A = sae.pre_acts(outputs.to("cuda"))
+    reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+
+first_dim_reshaped = reshaped_activations_A.shape[0] * reshaped_activations_A.shape[1]
+reshaped_activations_A = reshaped_activations_A.reshape(first_dim_reshaped, reshaped_activations_A.shape[-1]).cpu()
+
+
+# In[42]:
+
+
+name = "EleutherAI/sae-pythia-160m-32k"
+layer_id2 = 2
+
+hookpoint = "layers." + str(layer_id2)
+sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    # outputs = model_2(**inputs, output_hidden_states=True)
+    reshaped_activations_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id2].to("cuda"))
+
+first_dim_reshaped = reshaped_activations_B.shape[0] * reshaped_activations_B.shape[1]
+reshaped_activations_B = reshaped_activations_B.reshape(first_dim_reshaped, reshaped_activations_B.shape[-1]).cpu()
+
+
+# ## check corrs 1-1
+
+# In[ ]:
+
+
+corr_mat, highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+
+
+# In[ ]:
+
+
+num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
+print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
+
+sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+
+
+# Below will only keep those 1-1, and all other features in model A that are mapped will not be kept. For L2 v L2, there are ~7000 total features in model A that were mapped to. But if we strictly keep only the 1-1 features, we only get 2000 model A features.
+# 
+# It does not make sense to try to make EVERY feature in model A to those in model B; only those with good correlation.
+
+# In[ ]:
+
+
+sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
+kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    if ind_A in kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+    # elif ind_A not in seen:  # only keep one if it's over count X
+    #     seen.add(ind_A)
+    #     filt_corr_ind_A.append(ind_A)
+    #     filt_corr_ind_B.append(ind_B)
+
+
+# In[ ]:
+
+
+num_unq_pairs = len(list(set(filt_corr_ind_A)))
+print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+print("num feats after filt: ", len(filt_corr_ind_A))
+
+
+# In[ ]:
+
+
+# from those that are many-to-1, consider the unmatched features so far.
+
+# sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
+# non1to1_feats_A = [feat_ID for feat_ID, count in sorted_feat_counts if count > 1]
+
+# non1to1_feats_B = []
+# seen = set()
+# for feat_A in non1to1_feats_A:
+#     non1to1_feats_B += [ind_B for ind_B, ind_A in enumerate(highest_correlations_indices_AB) if ind_A == feat_A]
+# non1to1_feats_B = list(set(non1to1_feats_B))
+
+
+# """ redo correlation by matching the subset of many-to-1 to unmatched features using hungarian algo
+# or finding max VALUE in matrix (not from row or col) and starting there, taking that row and col off as cands, and continuing.
+# """
+# 
+
+# In[ ]:
+
+
+# among all the remaining features, get the highest ind
+
+cloned_corr_matrix = corr_mat.clone()
+
+# for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+#     cloned_corr_matrix[ind_A, ind_B] = -float('inf')
+cloned_corr_matrix[filt_corr_ind_A, filt_corr_ind_B] = -np.inf
+
+import copy
+# get the next 1-1 pair. do this until all non 1-1 feats are paired
+# indices_A = list(filt_corr_ind_A)
+# indices_B = list(filt_corr_ind_B)
+indices_A = []
+indices_B = []
+newvals = []
+while len(indices_B) < weight_matrix_2.shape[0]:
+    print(len(indices_B))
+    max_value = torch.max(cloned_corr_matrix)
+    print(max_value)
+    newvals.append(max_value)
+    print('num unique:' , len(list(set(indices_A))) )
+    if max_value < 0.1 or len(list(set(indices_A))) != len(indices_A):
+    # if max_value < 0.9999:
+        break
+    indices = (corr_mat == max_value).nonzero(as_tuple=True)
+    r, c = indices[0], indices[1]
+    cloned_corr_matrix[r, :] = -np.inf
+    cloned_corr_matrix[:, c] = -np.inf
+    indices_A.append(r)
+    indices_B.append(c)
+
+
+# In[ ]:
+
+
+sum(newvals) / len(newvals)
+
+
+# In[ ]:
+
+
+import pickle
+with open('indices_A.pkl', 'wb') as f:
+    pickle.dump(indices_A, f)
+with open('indices_B.pkl', 'wb') as f:
+    pickle.dump(indices_B, f)
+
+from google.colab import files
+files.download('indices_A.pkl')
+files.download('indices_B.pkl')
+
+
+# In[ ]:
+
+
+import numpy
+
+indo_A = []
+for ind in indices_A:
+    if isinstance(ind, numpy.int64):
+        indo_A.append(int(ind))  # Ensuring it's a Python int type
+    elif isinstance(ind, list) and len(ind) == 1:
+        indo_A.append(int(ind[0]))
+    else:
+        indo_A.append(int(ind[0]))  # Assuming ind is a list with at least one item
+
+
+# In[ ]:
+
+
+len(indo_A)
+
+
+# In[ ]:
+
+
+len(list(set(indo_A)))
+
+
+# In[ ]:
+
+
+indo_B = []
+for ind in indices_B:
+    if isinstance(ind, numpy.int64) or isinstance(ind, int):
+        indo_B.append(int(ind))  # Ensuring it's a Python int type
+    elif isinstance(ind, list) and len(ind) == 1:
+        indo_B.append(int(ind[0]))
+    else:
+        indo_B.append(int(ind[0]))  # Assuming ind is a list with at least one item
+
+
+# In[ ]:
+
+
+len(indo_B)
+
+
+# In[ ]:
+
+
+len(list(set(indo_B)))
+
+
+# In[ ]:
+
+
+corr_mat[indo_A[-1], indo_B[-1]]
+
+
+# In[ ]:
+
+
+# # this already masks so wont sel same as before
+# max_val, max_idx = cloned_corr_matrix[:, indo_B[3000]].max(dim=0)
+# print(max_idx)
+# max_val
+
+
+# In[ ]:
+
+
+# max_val, max_idx = corr_mat[:, indo_B[3000]].max(dim=0)
+# print(max_idx)
+# max_val
+
+
+# In[ ]:
+
+
+count = torch.sum(corr_mat > 0.99)
+count
+
+
+# In[ ]:
+
+
+count = torch.sum(corr_mat > 0.9999)
+count
+
+
+# In[ ]:
+
+
+count = torch.sum(corr_mat == 1.0000)
+count
+
+
+# In[ ]:
+
+
+corr_mat.shape[0] * corr_mat.shape[1]
+
+
+# In[ ]:
+
+
+corr_mat.mean()
+
+
+# In[ ]:
+
+
+max_val, max_idx = corr_mat.max(dim=0)
+
+
+# In[ ]:
+
+
+sum(max_val) / len(max_val)
+
+
+# In[ ]:
+
+
+plt.hist(max_val)
+plt.show()
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[indo_A], weight_matrix_2[indo_B], "nd")
+
+
+# In[ ]:
+
+
+score_rand(1, weight_matrix_np, weight_matrix_2, len(indo_A),
+                                                svcca, shapereq_bool=True)
+
+
+# In[ ]:
+
+
+score_rand(1, weight_matrix_np, weight_matrix_2, len(list(set(indo_A))),
+                                                svcca, shapereq_bool=True)
+
+
+# In[ ]:
+
+
+combined_A = indo_A + filt_corr_ind_A
+combined_B = indo_B + filt_corr_ind_B
+svcca(weight_matrix_np[combined_A], weight_matrix_2[combined_B], "nd")
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
+
+
+# In[ ]:
+
+
+# switch adding order
+combined_A = filt_corr_ind_A + indo_A
+combined_B = filt_corr_ind_B + indo_B
+svcca(weight_matrix_np[combined_A], weight_matrix_2[combined_B], "nd")
+
+
+# In[ ]:
+
+
+# nonsense
+combined_A = filt_corr_ind_A + indo_B
+combined_B = filt_corr_ind_B + indo_A
+svcca(weight_matrix_np[combined_A], weight_matrix_2[combined_B], "nd")
+
+
+# In[ ]:
+
+
+# completel nonsense
+combined_A = filt_corr_ind_A[100:200] + indo_B
+combined_B = filt_corr_ind_B[200:300] + indo_A
+svcca(weight_matrix_np[combined_A], weight_matrix_2[combined_B], "nd")
+
+
+# In[ ]:
+
+
+# # Assuming cloned_corr_matrix is a torch.Tensor
+# indices_A = list(filt_corr_ind_A)  # Shallow copy may suffice unless original lists are modified externally
+# indices_B = list(filt_corr_ind_B)
+
+# # Using a mask to manage updates to avoid re-finding max repeatedly
+# mask = torch.ones_like(cloned_corr_matrix, dtype=torch.bool)
+
+# while len(indices_B) < weight_matrix_2.shape[0]:
+#     # Apply mask to consider only valid entries
+#     valid_matrix = torch.where(mask, cloned_corr_matrix, torch.tensor(float('-inf')))
+#     max_value = torch.max(valid_matrix)
+#     max_pos = torch.nonzero(valid_matrix == max_value, as_tuple=True)
+#     r, c = max_pos[0].item(), max_pos[1].item()
+
+#     # Update mask to prevent these indices from being considered again
+#     mask[r, c] = False
+
+#     cloned_corr_matrix[r, c] = float('-inf')
+#     indices_A.append(r)
+#     indices_B.append(c)
+
+#     # Consider removing print in final version to speed up
+#     print(len(indices_B))
+
+
+# In[ ]:
+
+
+svcca(weight_matrix_np[highest_correlations_indices_AB], weight_matrix_2, "nd")
+
+
+# ## sorting
+
+# In[43]:
+
+
+corr_mat, highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+
+
+# In[44]:
+
+
+sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
+kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    if ind_A in kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+
+
+# In[45]:
+
+
+# # among all the remaining features, get the highest ind
+
+# cloned_corr_matrix = corr_mat.clone()
+
+# # Assuming filt_corr_ind_A and filt_corr_ind_B are already defined
+# indices_A = list(filt_corr_ind_A)
+# indices_B = list(filt_corr_ind_B)
+
+# # Ensure cloned_corr_matrix is a PyTorch tensor
+# if not isinstance(cloned_corr_matrix, torch.Tensor):
+#     cloned_corr_matrix = torch.tensor(cloned_corr_matrix)
+
+# # Move the tensor to GPU if available
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# cloned_corr_matrix = cloned_corr_matrix.to(device)
+
+# # Flatten the matrix and get the sorted indices
+# flattened_matrix = cloned_corr_matrix.flatten()
+
+# # Get the sorted indices in descending order
+# # OOM
+# sorted_values, sorted_indices = torch.sort(flattened_matrix, descending=True)
+
+
+# In[46]:
+
+
+# among all the remaining features, get the highest ind
+
+cloned_corr_matrix = corr_mat.clone()
+
+cloned_corr_matrix[filt_corr_ind_A, :] = -np.inf
+cloned_corr_matrix[:, filt_corr_ind_B] = -np.inf
+
+# Determine the number of additional elements needed
+num_elements_needed = weight_matrix_2.shape[0] - len(indices_B)
+
+# Flatten the cloned_corr_matrix
+flattened_matrix = cloned_corr_matrix.flatten()
+
+# Get the indices that would sort the array in descending order
+sorted_indices = np.argsort(-flattened_matrix)
+
+
+# In[67]:
+
+
+0.8 % 0.1 == 0
+
+
+# In[68]:
+
+
+0.833 // 0.1
+
+
+# In[69]:
+
+
+0.733 // 0.1
+
+
+# In[76]:
+
+
+# Assuming filt_corr_ind_A and filt_corr_ind_B are already defined
+indices_A = list(filt_corr_ind_A)
+indices_B = list(filt_corr_ind_B)
+
+assigned_rows = set(indices_A)
+assigned_cols = set(indices_B)
+
+new_indices_A = []
+new_indices_B = []
+
+# Initialize counters
+i = 0
+total_elements = len(flattened_matrix)
+num_elements_needed = weight_matrix_2.shape[0] - len(indices_B) # 5000
+corr_vals = []
+
+# use this to slice at place where it changes
+ind_corr_thres = [] # the index when corr dips below 0.1, 0.2, etc.
+
+# While we need more assignments and there are still elements to consider
+# while len(indices_B) < weight_matrix_2.shape[0] and i < total_elements:
+while len(new_indices_B) < num_elements_needed and i < total_elements:
+    # Convert flat index to 2D index
+    r, c = np.unravel_index(sorted_indices[i], cloned_corr_matrix.shape)
+    i += 1
+
+    corr = corr_mat[r][c]
+
+    # wrong: # if corr  % 0.1 == 0:
+    # change from 0.8 to 0.7, etc.
+    if corr_vals:
+        if (corr // 0.1) != (corr_vals[-1] // 0.1):
+            ind_corr_thres.append(len(new_indices_B))
+
+    if corr < 0.1:
+        break
+
+    # Check if row and column have not been assigned yet
+    if r not in assigned_rows and c not in assigned_cols:
+        new_indices_A.append(r)
+        new_indices_B.append(c)
+        assigned_rows.add(r)
+        assigned_cols.add(c)
+        corr_vals.append(corr)
+        if len(new_indices_B) % 500 == 0:
+            print("Corr: ", corr, len(new_indices_B))
+
+
+# In[ ]:
+
+
+import numpy
+
+def indices_as_int(indices_A, new_indices_A):
+    indo_A = list(indices_A)
+    # indo_A = []
+    # for ind in indices_A:
+    for ind in new_indices_A:
+        if isinstance(ind, numpy.int64):
+            indo_A.append(int(ind))  # Ensuring it's a Python int type
+        elif isinstance(ind, list) and len(ind) == 1:
+            indo_A.append(int(ind[0]))
+        else:
+            indo_A.append(int(ind[0]))  # Assuming ind is a list with at least one item
+    return indo_A
+
+
+# In[107]:
+
+
+indo_A = indices_as_int(indices_A, new_indices_A)
+indo_B = indices_as_int(indices_B, new_indices_B)
+
+
+# In[ ]:
+
+
+import pickle
+with open('indices_A.pkl', 'wb') as f:
+    pickle.dump(indo_A, f)
+with open('indices_B.pkl', 'wb') as f:
+    pickle.dump(indo_B, f)
+
+from google.colab import files
+files.download('indices_A.pkl')
+files.download('indices_B.pkl')
+
+
+# In[96]:
+
+
+len(indo_A)
+
+
+# In[93]:
+
+
+len(list(set(indo_A)))
+
+
+# In[94]:
+
+
+len(list(set(indo_B)))
+
+
+# In[82]:
+
+
+# corr up to 0.1
+svcca(weight_matrix_np[indo_A], weight_matrix_2[indo_B], "nd")
+
+
+# In[108]:
+
+
+( sum(corr_vals) / len(corr_vals) ).item()
+
+
+# In[98]:
+
+
+ind_corr_thres = list(set(ind_corr_thres))
+ind_corr_thres.sort()
+ind_corr_thres
+
+
+# In[99]:
+
+
+# corr up to 0.2
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[-1]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[-1]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[101]:
+
+
+# corr up to 0.4
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[3]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[3]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[100]:
+
+
+# corr up to 0.5
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[4]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[4]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[102]:
+
+
+# corr up to 0.8
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[1]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[1]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[103]:
+
+
+corr_vals = []
+for ind_A, ind_B in zip(indo_A, indo_B):
+    corr_vals.append(corr_mat[ind_A][ind_B])
+( sum(corr_vals) / len(corr_vals) ).item()
+
+
+# In[110]:
+
+
+# corr up to 0.9
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[0]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[0]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[111]:
+
+
+corr_vals = []
+for ind_A, ind_B in zip(indo_A, indo_B):
+    corr_vals.append(corr_mat[ind_A][ind_B])
+( sum(corr_vals) / len(corr_vals) ).item()
+
+
+# In[109]:
+
+
+indo_A = indices_as_int(indices_A, [])
+indo_B = indices_as_int(indices_B, [])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# ## wrong way; arb index loop
+
+# In[ ]:
+
+
+# import copy
+# used_indices_A = copy.deepcopy(filt_corr_ind_A)
+
+
+# In[ ]:
+
+
+# sorted_feat_counts[0:10]
+
+
+# In[ ]:
+
+
+# feat_A = 1761
+# feat_B_lst = [ind_B for ind_B, ind_A in enumerate(highest_correlations_indices_AB) if ind_A == feat_A]
+
+
+# In[ ]:
+
+
+# feat_B_lst[0:10]
+
+
+# In[ ]:
+
+
+# feat_B = feat_B_lst[0]
+
+
+# In[ ]:
+
+
+# # this is wrong bc it goes thru each ind arbitrarily
+
+# cloned_corr_matrix[used_indices_A, :] = -float('inf')
+
+# max_value = torch.max(cloned_corr_matrix[:, feat_B])
+# indices = (corr_mat == max_value).nonzero(as_tuple=True)
+# rows = indices[0]
+# # cols = indices[1]
+
+# print("Maximum value:", max_value.item())
+# print("Row indices of max value:", rows)
+# # print("Column indices of max value:", cols)
+
+
+# In[ ]:
+
+
+# max_val, max_idx = cloned_corr_matrix[:, feat_B].max(dim=0)
+# max_idx
+
+
+# In[ ]:
+
+
+# # one A to many B, so choose a diff A for each B
+
+# # this is wrong bc it goes thru each ind arbitrarily
+
+# max_indices = []
+# max_values = []
+
+# for feat_B in feat_B_lst[0:15]:
+#     cloned_corr_matrix[used_indices_A, :] = -float('inf')
+#     max_val, max_idx = cloned_corr_matrix[:, feat_B].max(dim=0)
+#     print("Maximum Corr:", max_val.item())
+#     print("Feat A:", max_idx)
+#     max_values.append(max_val)
+#     max_indices.append(max_idx)
+
+#     # Mark indices as used
+#     # used_indices_A[max_idx] = True
+#     cloned_corr_matrix[max_idx, :] = -float('inf')
+
+#     print( "Total Avg:", sum(max_values) / len(max_values))
+
+
+# In[ ]:
+
+
+# plt.hist(max_values)
+# plt.show()
+
+
+# ## loop- 1-1
 
 # In[ ]:
 

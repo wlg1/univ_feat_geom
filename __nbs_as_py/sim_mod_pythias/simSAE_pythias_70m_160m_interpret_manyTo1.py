@@ -1930,7 +1930,9 @@ for i in range(0, 12): # 0, 12
     reshaped_activations_B = reshaped_activations_B.reshape(first_dim_reshaped, reshaped_activations_B.shape[-1]).cpu()
 
     """
-    `batched_correlation(reshaped_activations_B, reshaped_activations_A)` : highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals. Use the list with smaller number of features (cols) as the second arg
+    `batched_correlation(reshaped_activations_B, reshaped_activations_A)` :
+    highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
+    Use the list with smaller number of features (cols) as the second arg
     """
     highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
     highest_correlations_indices_AB = highest_correlations_indices_AB.detach().cpu().numpy()

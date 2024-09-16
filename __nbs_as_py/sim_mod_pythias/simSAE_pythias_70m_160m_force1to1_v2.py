@@ -3,27 +3,20 @@
 
 # # setup
 
-# In[ ]:
-
-
-import logging
-logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
-
-
-# In[ ]:
+# In[3]:
 
 
 # from google.colab import drive
 # drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[4]:
 
 
 get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
 
 
-# In[ ]:
+# In[5]:
 
 
 # you should load this before cloning repo files
@@ -35,14 +28,18 @@ from sae.utils import decoder_impl
 from sae import Sae
 
 
-# In[ ]:
+# In[6]:
 
 
 import gc
+import time
 import pickle
+from google.colab import files
+import json
+
 import numpy as np
 import matplotlib.pyplot as plt
-import json
+from collections import Counter
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import NamedTuple, Optional, Callable, Union, List, Tuple
@@ -55,20 +52,58 @@ from huggingface_hub import snapshot_download
 from natsort import natsorted
 from safetensors.torch import load_model, save_model
 
+import logging
+logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
-
-# In[ ]:
-
-
-from collections import Counter
 
 
 # ## corr fns
 
-# In[ ]:
+# In[8]:
 
 
+def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
+    # Ensure tensors are on GPU
+    # if torch.cuda.is_available():
+    #     reshaped_activations_A = reshaped_activations_A.to('cuda')
+    #     reshaped_activations_B = reshaped_activations_B.to('cuda')
+
+    normalized_A = normalize_byChunks(reshaped_activations_A, chunk_size=10000)
+    normalized_B = normalize_byChunks(reshaped_activations_B, chunk_size=10000)
+
+    if torch.cuda.is_available():
+        normalized_A = normalized_A.to('cuda')
+        normalized_B = normalized_B.to('cuda')
+
+    num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
+    max_values = []
+    max_indices = []
+    full_corr_matrix = []
+
+    for batch in range(num_batches):
+        start = batch * batch_size
+        end = min(start + batch_size, normalized_B.shape[1])
+
+        batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
+        full_corr_matrix.append(batch_corr_matrix.cpu())  # Append to the list and move to CPU to save GPU memory
+
+        max_val, max_idx = batch_corr_matrix.max(dim=0)
+        max_values.append(max_val)
+        max_indices.append(max_idx)  # Adjust indices for the batch offset
+
+        del batch_corr_matrix
+        torch.cuda.empty_cache()
+    full_corr_matrix = torch.cat(full_corr_matrix, dim=1)
+
+    # return torch.cat(max_indices), torch.cat(max_values)
+    return full_corr_matrix, torch.cat(max_indices).cpu().numpy(), torch.cat(max_values).cpu().numpy()
+
+
+# In[9]:
+
+
+# use numpy bc torch vars take up more memory
 def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of rows per chunk
     mean_A = actv_tensor.mean(dim=0, keepdim=True)
     std_A = actv_tensor.std(dim=0, keepdim=True)
@@ -94,47 +129,9 @@ def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of r
     return torch.tensor(normalized_A)
 
 
-# In[ ]:
-
-
-def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
-    # Ensure tensors are on GPU
-    # if torch.cuda.is_available():
-    #     reshaped_activations_A = reshaped_activations_A.to('cuda')
-    #     reshaped_activations_B = reshaped_activations_B.to('cuda')
-
-    normalized_A = normalize_byChunks(reshaped_activations_A, chunk_size=10000)
-    normalized_B = normalize_byChunks(reshaped_activations_B, chunk_size=10000)
-
-    if torch.cuda.is_available():
-        normalized_A = normalized_A.to('cuda')
-        normalized_B = normalized_B.to('cuda')
-
-    num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
-    max_values = []
-    max_indices = []
-
-    for batch in range(num_batches):
-        start = batch * batch_size
-        # if start % 5000 == 0:
-        #     print(start)
-        end = min(start + batch_size, normalized_B.shape[1])
-
-        batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
-        max_val, max_idx = batch_corr_matrix.max(dim=0)
-        max_values.append(max_val)
-        max_indices.append(max_idx)  # Adjust indices for the batch offset
-
-        del batch_corr_matrix
-        torch.cuda.empty_cache()
-
-    # return torch.cat(max_indices), torch.cat(max_values)
-    return torch.cat(max_indices).cpu().numpy(), torch.cat(max_values).cpu().numpy()
-
-
 # ## sim fns
 
-# In[ ]:
+# In[10]:
 
 
 import functools
@@ -240,7 +237,7 @@ class Pipeline:
         )
 
 
-# In[ ]:
+# In[11]:
 
 
 from typing import List, Set, Union
@@ -297,7 +294,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[ ]:
+# In[12]:
 
 
 import functools
@@ -624,7 +621,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[ ]:
+# In[13]:
 
 
 import scipy.optimize
@@ -646,7 +643,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[ ]:
+# In[14]:
 
 
 from typing import Optional
@@ -737,7 +734,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[ ]:
+# In[15]:
 
 
 ##################################################################################
@@ -1328,7 +1325,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[ ]:
+# In[16]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1348,7 +1345,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[ ]:
+# In[17]:
 
 
 # import random
@@ -1359,7 +1356,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
 
 # ## plot fns
 
-# In[ ]:
+# In[18]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
@@ -1410,7 +1407,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[19]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
@@ -1461,7 +1458,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[20]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
@@ -1512,7 +1509,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[21]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
@@ -1549,7 +1546,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[22]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
@@ -1586,7 +1583,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[23]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1638,7 +1635,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[ ]:
+# In[24]:
 
 
 def highest_activating_tokens(
@@ -1666,7 +1663,7 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
 
 
-# In[ ]:
+# In[25]:
 
 
 from rich import print as rprint
@@ -1694,7 +1691,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
 
 # ## get llm actv fns
 
-# In[ ]:
+# In[26]:
 
 
 from torch.utils.data import DataLoader, TensorDataset
@@ -1729,7 +1726,7 @@ def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
 
 # ## get sae actv fns
 
-# In[ ]:
+# In[27]:
 
 
 # def get_weights_and_acts(name, cfg_dict, layer_id, outputs):
@@ -1779,7 +1776,7 @@ def get_weights_and_acts(name, layer_id, outputs):
     return weight_matrix_np, reshaped_activations_A
 
 
-# In[ ]:
+# In[28]:
 
 
 def get_weights_and_acts_byLayer(name, layer_id, outputs):
@@ -1800,7 +1797,7 @@ def get_weights_and_acts_byLayer(name, layer_id, outputs):
     return weight_matrix_np, reshaped_activations_A
 
 
-# In[ ]:
+# In[29]:
 
 
 def count_zero_columns(tensor):
@@ -1813,7 +1810,7 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[ ]:
+# In[30]:
 
 
 def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
@@ -1915,7 +1912,7 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
 
 # # load data
 
-# In[ ]:
+# In[31]:
 
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -1924,7 +1921,7 @@ tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
 tokenizer.pad_token = tokenizer.eos_token
 
 
-# In[ ]:
+# In[32]:
 
 
 from datasets import load_dataset
@@ -1932,7 +1929,7 @@ from datasets import load_dataset
 dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
 
 
-# In[ ]:
+# In[33]:
 
 
 batch_size = 100
@@ -1957,7 +1954,7 @@ inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, ma
 
 # # load models
 
-# In[ ]:
+# In[34]:
 
 
 model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m")
@@ -1966,29 +1963,436 @@ model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-160m")
 
 # ## get LLM actvs
 
-# In[ ]:
+# In[35]:
 
 
 with torch.inference_mode():
-    # outputs = model(**inputs, output_hidden_states=True)
+    outputs = model(**inputs, output_hidden_states=True)
     outputs_2 = model_2(**inputs, output_hidden_states=True)
 
     # outputs = get_llm_actvs_batch(model, inputs, batch_size=100, maxseqlen=300)
     # outputs_2 = get_llm_actvs_batch(model_2, inputs, batch_size=100, maxseqlen=300)
 
 
-# # MLP 3
+# # L5 v L10: pair 1-1
 
-# loop- 1-1
+# ## get sae actvs
+
+# In[36]:
+
+
+layer_id = 5
+
+# with torch.inference_mode():
+#     outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[37]:
+
+
+name = "EleutherAI/sae-pythia-70m-32k"
+hookpoint = "layers." + str(layer_id)
+sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+
+weight_matrix_np = sae.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    # reshaped_activations_A = sae.pre_acts(outputs.to("cuda"))
+    reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+
+first_dim_reshaped = reshaped_activations_A.shape[0] * reshaped_activations_A.shape[1]
+reshaped_activations_A = reshaped_activations_A.reshape(first_dim_reshaped, reshaped_activations_A.shape[-1]).cpu()
+
+
+# In[38]:
+
+
+name = "EleutherAI/sae-pythia-160m-32k"
+layer_id2 = 10
+
+hookpoint = "layers." + str(layer_id2)
+sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    # outputs = model_2(**inputs, output_hidden_states=True)
+    reshaped_activations_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id2].to("cuda"))
+
+first_dim_reshaped = reshaped_activations_B.shape[0] * reshaped_activations_B.shape[1]
+reshaped_activations_B = reshaped_activations_B.reshape(first_dim_reshaped, reshaped_activations_B.shape[-1]).cpu()
+
+
+# ## sorting
+
+# In[40]:
+
+
+corr_mat, highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+
+
+# In[41]:
+
+
+sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
+kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+    if ind_A in kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+
+
+# In[42]:
+
+
+# among all the remaining features, get the highest ind
+start_time = time.time()
+
+cloned_corr_matrix = corr_mat.clone()
+cloned_corr_matrix[filt_corr_ind_A, :] = -np.inf
+cloned_corr_matrix[:, filt_corr_ind_B] = -np.inf
+
+flattened_matrix = cloned_corr_matrix.flatten()
+
+# Get the indices that would sort the array in descending order
+sorted_indices = np.argsort(-flattened_matrix)
+print("Time taken: ", time.time() - start_time)
+
+
+# In[43]:
+
+
+with open(f'sorted_indices_L{layer_id}_L{layer_id2}.pkl', 'wb') as f:
+    pickle.dump(sorted_indices, f)
+# files.download(f'sorted_indices_L{layer_id}_L{layer_id2}.pkl')  # too big
+
+
+# In[45]:
+
+
+from google.colab import drive
+drive.mount('/content/drive')
+
+
+# In[46]:
+
+
+import shutil
+filename = f'sorted_indices_L{layer_id}_L{layer_id2}.pkl'
+destination_path = f'/content/drive/MyDrive/sae_files/{filename}'
+
+shutil.copy(filename, destination_path)
+
+
+# ## filt
 
 # In[ ]:
 
 
-layer_id = 3
+start_time = time.time()
 
-with torch.inference_mode():
-    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+indices_A = list(filt_corr_ind_A)
+indices_B = list(filt_corr_ind_B)
 
+assigned_rows = set(indices_A)
+assigned_cols = set(indices_B)
+
+new_indices_A = []
+new_indices_B = []
+
+# Initialize counters
+i = 0
+total_elements = len(flattened_matrix)
+num_elements_needed = weight_matrix_2.shape[0] - len(indices_B) # 5000
+corr_vals = []
+
+# use this to slice at place where it changes
+ind_corr_thres = [] # the index when corr dips below 0.1, 0.2, etc.
+
+# While we need more assignments and there are still elements to consider
+while len(new_indices_B) < num_elements_needed and i < total_elements:
+    # Convert flat index to 2D index
+    r, c = np.unravel_index(sorted_indices[i], cloned_corr_matrix.shape)
+    i += 1
+
+    corr = corr_mat[r][c]
+
+    if corr < 0.2:
+        break
+
+    # Check if row and column have not been assigned yet
+    if r not in assigned_rows and c not in assigned_cols:
+        new_indices_A.append(r)
+        new_indices_B.append(c)
+        assigned_rows.add(r)
+        assigned_cols.add(c)
+        corr_vals.append(corr)
+        # if corr_vals:
+        if (corr // 0.1) != (corr_vals[-1] // 0.1):
+            ind_corr_thres.append(len(new_indices_B))
+        if len(new_indices_B) % 500 == 0:
+            print("Corr: ", corr, len(new_indices_B))
+
+
+# In[ ]:
+
+
+print("Time taken: ", time.time() - start_time)
+
+
+# In[ ]:
+
+
+( sum(corr_vals) / len(corr_vals) ).item()
+
+
+# In[49]:
+
+
+import numpy
+
+def indices_as_int(indices_A, new_indices_A):
+    indo_A = list(indices_A)
+    # indo_A = []
+    # for ind in indices_A:
+    for ind in new_indices_A:
+        if isinstance(ind, numpy.int64):
+            indo_A.append(int(ind))  # Ensuring it's a Python int type
+        elif isinstance(ind, list) and len(ind) == 1:
+            indo_A.append(int(ind[0]))
+        else:
+            indo_A.append(int(ind[0]))  # Assuming ind is a list with at least one item
+    return indo_A
+
+
+# In[ ]:
+
+
+indo_A = indices_as_int(indices_A, new_indices_A)
+indo_B = indices_as_int(indices_B, new_indices_B)
+
+
+# In[ ]:
+
+
+with open(f'indices_A_L{layer_id}_L{layer_id2}.pkl', 'wb') as f:
+    pickle.dump(indo_A, f)
+with open(f'indices_B_L{layer_id}_L{layer_id2}.pkl', 'wb') as f:
+    pickle.dump(indo_B, f)
+
+from google.colab import files
+files.download(f'indices_A_L{layer_id}_L{layer_id2}.pkl')
+files.download(f'indices_B_L{layer_id}_L{layer_id2}.pkl')
+
+
+# In[ ]:
+
+
+len(indo_A)
+
+
+# In[ ]:
+
+
+len(list(set(indo_A)))
+
+
+# In[ ]:
+
+
+len(list(set(indo_B)))
+
+
+# In[ ]:
+
+
+# corr up to 0.1
+svcca(weight_matrix_np[indo_A], weight_matrix_2[indo_B], "nd")
+
+
+# In[ ]:
+
+
+ind_corr_thres = list(set(ind_corr_thres))
+ind_corr_thres.sort()
+ind_corr_thres
+
+
+# In[ ]:
+
+
+# corr up to 0.3
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[-1]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[-1]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[ ]:
+
+
+# corr up to 0.4
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[3]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[3]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[ ]:
+
+
+# corr up to 0.5
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[4]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[4]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[ ]:
+
+
+# corr up to 0.8
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[1]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[1]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[ ]:
+
+
+corr_vals = []
+for ind_A, ind_B in zip(indo_A, indo_B):
+    corr_vals.append(corr_mat[ind_A][ind_B])
+( sum(corr_vals) / len(corr_vals) ).item()
+
+
+# In[ ]:
+
+
+# corr up to 0.9
+indo_A = indices_as_int(indices_A, new_indices_A[:ind_corr_thres[0]])
+indo_B = indices_as_int(indices_B, new_indices_B[:ind_corr_thres[0]])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# In[ ]:
+
+
+corr_vals = []
+for ind_A, ind_B in zip(indo_A, indo_B):
+    corr_vals.append(corr_mat[ind_A][ind_B])
+( sum(corr_vals) / len(corr_vals) ).item()
+
+
+# In[ ]:
+
+
+indo_A = indices_as_int(indices_A, [])
+indo_B = indices_as_int(indices_B, [])
+print(len(indo_A))
+print(len(list(set(indo_A))))
+svcca(weight_matrix_np[indo_A ], weight_matrix_2[indo_B ], "nd")
+
+
+# ## filt v2
+
+# In[47]:
+
+
+start_time = time.time()
+
+indices_A = list(filt_corr_ind_A)
+indices_B = list(filt_corr_ind_B)
+
+# Initialize boolean arrays for assigned rows and columns
+assigned_rows_flags = np.zeros(cloned_corr_matrix.shape[0], dtype=bool)
+assigned_cols_flags = np.zeros(cloned_corr_matrix.shape[1], dtype=bool)
+
+# Mark the already assigned rows and columns
+assigned_rows_flags[indices_A] = True
+assigned_cols_flags[indices_B] = True
+
+new_indices_A = []
+new_indices_B = []
+
+# Number of elements needed
+num_elements_needed = weight_matrix_2.shape[0] - len(indices_B)  # 5000
+
+corr_vals = []
+
+# Use this to slice at the place where it changes
+ind_corr_thres = []  # The index when corr dips below 0.1, 0.2, etc.
+
+# Precompute the indices and correlations
+r_indices, c_indices = np.unravel_index(sorted_indices, cloned_corr_matrix.shape)
+corrs = corr_mat[r_indices, c_indices]
+
+# Filter out indices with already assigned rows or columns
+unassigned_mask = (~assigned_rows_flags[r_indices]) & (~assigned_cols_flags[c_indices])
+
+r_indices = r_indices[unassigned_mask]
+c_indices = c_indices[unassigned_mask]
+corrs = corrs[unassigned_mask]
+
+# Initialize a mask to keep track of valid indices during the loop
+valid_mask = np.ones(len(corrs), dtype=bool)
+
+selected_count = 0
+idx = 0
+
+# While we need more assignments and there are still elements to consider
+while selected_count < num_elements_needed and idx < len(corrs):
+    if not valid_mask[idx]:
+        idx += 1
+        continue
+
+    curr_r = r_indices[idx]
+    curr_c = c_indices[idx]
+    curr_corr = corrs[idx]
+
+    if curr_corr < 0.2:
+        break
+
+    if corr_vals:
+        if (curr_corr // 0.1) != (corr_vals[-1] // 0.1):
+            ind_corr_thres.append(len(new_indices_B))
+
+    # Assign the row and column
+    new_indices_A.append(curr_r)
+    new_indices_B.append(curr_c)
+    assigned_rows_flags[curr_r] = True
+    assigned_cols_flags[curr_c] = True
+    corr_vals.append(curr_corr)
+    selected_count += 1
+
+    # if selected_count % 500 == 0:
+    print("Corr: ", curr_corr, selected_count)
+
+    # Update the valid_mask to exclude indices with the newly assigned row or column
+    same_row = r_indices == curr_r
+    same_col = c_indices == curr_c
+    invalid_indices = same_row | same_col
+
+    # Set valid_mask to False where invalid_indices is True
+    valid_mask[invalid_indices] = False
+
+    idx += 1  # Move to the next index
+
+end_time = time.time()
+print("Time taken: ", end_time - start_time)
+
+
+# ## loop- 1-1
 
 # In[ ]:
 
