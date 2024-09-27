@@ -3,27 +3,20 @@
 
 # # setup
 
-# In[ ]:
-
-
-import logging
-logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
-
-
-# In[ ]:
+# In[1]:
 
 
 # from google.colab import drive
 # drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[2]:
 
 
 get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
 
 
-# In[ ]:
+# In[3]:
 
 
 # you should load this before cloning repo files
@@ -35,10 +28,9 @@ from sae.utils import decoder_impl
 from sae import Sae
 
 
-# In[ ]:
+# In[4]:
 
 
-import gc
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
@@ -58,57 +50,34 @@ from safetensors.torch import load_model, save_model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# In[ ]:
+# In[51]:
 
 
 from collections import Counter
+import pandas as pd
+from IPython.display import display
 
 
 # ## corr fns
 
-# In[ ]:
-
-
-def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of rows per chunk
-    mean_A = actv_tensor.mean(dim=0, keepdim=True)
-    std_A = actv_tensor.std(dim=0, keepdim=True)
-
-    num_chunks = actv_tensor.shape[0] // chunk_size
-
-    normalized_A = np.zeros_like(actv_tensor.cpu())  # Preallocate the normalized matrix
-    # normalized_A = actv_tensor.new_zeros(actv_tensor.size())
-
-    for i in range(num_chunks):
-        # print (i, num_chunks)
-        start_index = i * chunk_size
-        end_index = start_index + chunk_size
-        chunk = actv_tensor[start_index:end_index]
-        normalized_A[start_index:end_index] = (chunk - mean_A) / (std_A + 1e-8)
-
-    # Handle any remaining rows if the data size is not perfectly divisible by chunk_size
-    if actv_tensor.shape[0] % chunk_size != 0:
-        start_index = num_chunks * chunk_size
-        chunk = actv_tensor[start_index:]
-        normalized_A[start_index:] = (chunk - mean_A) / (std_A + 1e-8)
-
-    return torch.tensor(normalized_A)
-
-
-# In[ ]:
+# In[6]:
 
 
 def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
     # Ensure tensors are on GPU
-    # if torch.cuda.is_available():
-    #     reshaped_activations_A = reshaped_activations_A.to('cuda')
-    #     reshaped_activations_B = reshaped_activations_B.to('cuda')
-
-    normalized_A = normalize_byChunks(reshaped_activations_A, chunk_size=10000)
-    normalized_B = normalize_byChunks(reshaped_activations_B, chunk_size=10000)
-
     if torch.cuda.is_available():
-        normalized_A = normalized_A.to('cuda')
-        normalized_B = normalized_B.to('cuda')
+        reshaped_activations_A = reshaped_activations_A.to('cuda')
+        reshaped_activations_B = reshaped_activations_B.to('cuda')
+
+    # Normalize columns of A
+    mean_A = reshaped_activations_A.mean(dim=0, keepdim=True)
+    std_A = reshaped_activations_A.std(dim=0, keepdim=True)
+    normalized_A = (reshaped_activations_A - mean_A) / (std_A + 1e-8)  # Avoid division by zero
+
+    # Normalize columns of B
+    mean_B = reshaped_activations_B.mean(dim=0, keepdim=True)
+    std_B = reshaped_activations_B.std(dim=0, keepdim=True)
+    normalized_B = (reshaped_activations_B - mean_B) / (std_B + 1e-8)  # Avoid division by zero
 
     num_batches = (normalized_B.shape[1] + batch_size - 1) // batch_size
     max_values = []
@@ -116,25 +85,60 @@ def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_si
 
     for batch in range(num_batches):
         start = batch * batch_size
-        # if start % 5000 == 0:
-        #     print(start)
         end = min(start + batch_size, normalized_B.shape[1])
-
         batch_corr_matrix = torch.matmul(normalized_A.t(), normalized_B[:, start:end]) / normalized_A.shape[0]
         max_val, max_idx = batch_corr_matrix.max(dim=0)
         max_values.append(max_val)
-        max_indices.append(max_idx)  # Adjust indices for the batch offset
+        max_indices.append(max_idx)
 
         del batch_corr_matrix
         torch.cuda.empty_cache()
 
-    # return torch.cat(max_indices), torch.cat(max_values)
-    return torch.cat(max_indices).cpu().numpy(), torch.cat(max_values).cpu().numpy()
+    corr_inds = torch.cat(max_indices).detach().cpu().numpy()
+    corr_vals = torch.cat(max_values).detach().cpu().numpy()
+    return corr_inds, corr_vals
+
+
+# In[81]:
+
+
+def filter_corr_pairs(mixed_modA_feats, mixed_modB_feats, kept_modA_feats):
+    filt_corr_ind_A = []
+    filt_corr_ind_B = []
+    seen = set()
+    for ind_A, ind_B in zip(mixed_modA_feats, mixed_modB_feats):
+        if ind_A in kept_modA_feats:
+            filt_corr_ind_A.append(ind_A)
+            filt_corr_ind_B.append(ind_B)
+        elif ind_A not in seen:  # only keep one if it's over count X
+            seen.add(ind_A)
+            filt_corr_ind_A.append(ind_A)
+            filt_corr_ind_B.append(ind_B)
+    num_unq_pairs = len(list(set(filt_corr_ind_A)))
+    print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+    print("num 1-1 feats after filt: ", num_unq_pairs )
+    return filt_corr_ind_A, filt_corr_ind_B, num_unq_pairs
+
+
+# In[8]:
+
+
+def get_new_mean_corr(modA_feats, modB_feats, corr_vals):
+    new_vals = []
+    seen = set()
+    for ind_A, ind_B in zip(modA_feats, modB_feats):
+        if ind_A not in seen:
+            seen.add(ind_A)
+            val = corr_vals[ind_B]
+            new_vals.append(val)
+    new_mean_corr = sum(new_vals) / len(new_vals)
+    # print(new_mean_corr)
+    return new_mean_corr
 
 
 # ## sim fns
 
-# In[ ]:
+# In[9]:
 
 
 import functools
@@ -240,7 +244,7 @@ class Pipeline:
         )
 
 
-# In[ ]:
+# In[10]:
 
 
 from typing import List, Set, Union
@@ -297,7 +301,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[ ]:
+# In[11]:
 
 
 import functools
@@ -624,7 +628,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[ ]:
+# In[12]:
 
 
 import scipy.optimize
@@ -646,7 +650,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[ ]:
+# In[13]:
 
 
 from typing import Optional
@@ -737,7 +741,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[ ]:
+# In[14]:
 
 
 ##################################################################################
@@ -1328,38 +1332,76 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[ ]:
+# In[15]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
     all_rand_scores = []
-    for i in range(num_runs):
-        rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=num_feats).tolist()
-        rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=num_feats).tolist()
+    i = 0
+    # for i in range(num_runs):
+    while i < num_runs:
+        try:
+            rand_modA_feats = np.random.choice(range(weight_matrix_np.shape[0]), size=num_feats, replace=False).tolist()
+            rand_modB_feats = np.random.choice(range(weight_matrix_2.shape[0]), size=num_feats, replace=False).tolist()
 
-        if shapereq_bool:
-            score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
-        else:
-            score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
-        all_rand_scores.append(score)
-    # print(sum(all_rand_scores) / len(all_rand_scores))
-    # plt.hist(all_rand_scores)
-    # plt.show()
+            if shapereq_bool:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
+            else:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
+            all_rand_scores.append(score)
+            i += 1
+        except:
+            continue
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[ ]:
+# In[16]:
 
 
-# import random
-# row_idxs = list(range(weight_matrix_2.shape[0]))
-# random.shuffle(row_idxs)
-# jaccard_similarity(weight_matrix_np, weight_matrix_2[row_idxs])
+def score_rand_corr(num_runs, weight_matrix_np, weight_matrix_2, num_feats, highest_correlations_indices_AB, sim_fn, shapereq_bool):
+    all_rand_scores = []
+    i = 0
+    # for i in range(num_runs):
+    while i < num_runs:
+        try:
+            rand_modB_feats = np.random.choice(range(weight_matrix_2.shape[0]), size=num_feats, replace=False).tolist()
+            rand_modA_feats = [highest_correlations_indices_AB[index] for index in rand_modB_feats]
+
+            if shapereq_bool:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
+            else:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
+            all_rand_scores.append(score)
+            i += 1
+        except:
+            continue
+    # print(sum(all_rand_scores) / len(all_rand_scores))
+    # plt.hist(all_rand_scores)
+    # plt.show()
+    return all_rand_scores
+
+
+# In[17]:
+
+
+import random
+def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
+    all_rand_scores = []
+    for i in range(num_runs):
+        row_idxs = list(range(num_feats))
+        random.shuffle(row_idxs)
+        if shapereq_bool:
+            score = sim_fn(weight_matrix_np, weight_matrix_2[row_idxs], "nd")
+        else:
+            score = sim_fn(weight_matrix_np, weight_matrix_2[row_idxs])
+        all_rand_scores.append(score)
+    # return sum(all_rand_scores) / len(all_rand_scores)
+    return all_rand_scores
 
 
 # ## plot fns
 
-# In[ ]:
+# In[18]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
@@ -1410,7 +1452,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[19]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
@@ -1461,7 +1503,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[20]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
@@ -1512,7 +1554,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[21]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
@@ -1549,7 +1591,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[22]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
@@ -1586,7 +1628,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[23]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1638,7 +1680,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[ ]:
+# In[24]:
 
 
 def highest_activating_tokens(
@@ -1666,70 +1708,62 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
 
 
-# In[ ]:
+# In[25]:
 
 
-from rich import print as rprint
-def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
-    s = ""
+def store_top_toks(top_acts_indices, top_acts_values, batch_tokens):
+    feat_samps = []
     for (batch_idx, seq_idx), value in zip(top_acts_indices, top_acts_values):
-        # s += f'{batch_idx}\n'
-        s += f'batchID: {batch_idx}, '
-        # Get the sequence as a string (with some padding on either side of our sequence)
-        seq_start = max(seq_idx - 5, 0)
-        seq_end = min(seq_idx + 5, batch_tokens.shape[1])
-        seq = ""
-        # Loop over the sequence, adding each token to the string (highlighting the token with the large activations)
-        for i in range(seq_start, seq_end):
-            # new_str_token = model.to_single_str_token(batch_tokens[batch_idx, i].item()).replace("\n", "\\n").replace("<|BOS|>", "|BOS|")
-            new_str_token = tokenizer.decode([batch_tokens[batch_idx, i].item()]).replace("\n", "\\n").replace("<|BOS|>", "|BOS|")
-            if i == seq_idx:
-                new_str_token = f"[bold u dark_orange]{new_str_token}[/]"
-            seq += new_str_token
-        # Print the sequence, and the activation value
-        s += f'Act = {value:.2f}, Seq = "{seq}"\n'
-
-    rprint(s)
+        new_str_token = tokenizer.decode(batch_tokens[batch_idx, seq_idx]).replace("\n", "\\n").replace("<|BOS|>", "|BOS|")
+        feat_samps.append(new_str_token)
+    return feat_samps
 
 
-# ## get llm actv fns
-
-# In[ ]:
+# In[26]:
 
 
-from torch.utils.data import DataLoader, TensorDataset
+def find_indices_with_keyword(fList, keyword):
+    """
+    Find all indices of fList which contain the keyword in the string at those indices.
 
-def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
-# def get_llm_actvs_batch(model, inputs, batch_size=100, maxseqlen=300):
-    # outputs_by_layer = {None for layerID in len(model.gpt_neox.layers)}
-    accumulated_outputs = None
-    dataset = TensorDataset(inputs['input_ids'], inputs['attention_mask'])
-    loader = DataLoader(dataset, batch_size=32, shuffle=False)
+    Args:
+    fList (list of str): List of strings to search within.
+    keyword (str): Keyword to search for within the strings of fList.
 
-    all_hidden_states = []
-    for batch in loader:
-        input_ids, attention_mask = batch
-
-        batch_inputs = {'input_ids': input_ids.to(model.device), 'attention_mask': attention_mask.to(model.device)}
-        with torch.no_grad():  # Disable gradient calculation for memory efficiency
-            outputs = model(**batch_inputs, output_hidden_states=True)
-            if accumulated_outputs is None:
-                accumulated_outputs = outputs.hidden_states[layer_id]
-                # for layer_id in len(model.gpt_neox.layers):
-                    # outputs_by_layer[layer_id] = outputs.hidden_states[layer_id]
-            else:
-                accumulated_outputs = torch.cat((accumulated_outputs, outputs.hidden_states[layer_id]), dim= 0)
-
-        del batch_inputs, outputs
-        torch.cuda.empty_cache()
-        gc.collect()
-
-    return accumulated_outputs
+    Returns:
+    list of int: List of indices where the keyword is found within the strings of fList.
+    """
+    index_list = []
+    for index, split_list in enumerate(fList):
+        no_space_list = [i.replace(' ', '').lower() for i in split_list]
+        if keyword in no_space_list:
+            index_list.append(index)
+    return index_list
 
 
-# ## get sae actv fns
+# ## get concept space features
 
-# In[ ]:
+# In[44]:
+
+
+# def get_mixed_feats(keywords):
+def get_mixed_feats(fList_model_B, corr_inds, keywords):
+    mixed_modA_feats = []
+    mixed_modB_feats = []
+    for kw in keywords:
+        modB_feats = find_indices_with_keyword(fList_model_B, kw)
+        modA_feats = [corr_inds[index] for index in modB_feats]
+        mixed_modA_feats.extend(modA_feats)
+        mixed_modB_feats.extend(modB_feats)
+
+    print("Unique modA feats: ", len(list(set(mixed_modA_feats))) )
+    print("Unique modB feats: ",  len(list(set(mixed_modB_feats))) )
+    return mixed_modA_feats, mixed_modB_feats
+
+
+# ## get actv fns
+
+# In[29]:
 
 
 # def get_weights_and_acts(name, cfg_dict, layer_id, outputs):
@@ -1737,70 +1771,22 @@ def get_weights_and_acts(name, layer_id, outputs):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     hookpoint = "layers." + str(layer_id)
 
-    ##### used this code when cfg dict got an unexpected keyword argument 'signed'; lib now fixed #####
-    # decoder=True
-
-    # repo_path = Path(
-    #             snapshot_download(
-    #                 name,
-    #                 allow_patterns=f"{hookpoint}/*" if hookpoint is not None else None,
-    #                 # allow_patterns = None
-    #             )
-    #         )
-    # if hookpoint is not None:
-    #     repo_path = repo_path / hookpoint
-    # path = Path(repo_path)
-    # # cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": d_in}
-    # d_in = cfg_dict.pop("d_in")
-    # cfg = SaeConfig(**cfg_dict)
-
-    # sae = Sae(d_in, cfg, device=device, decoder=decoder)
-
-    # load_model(
-    #     model=sae,
-    #     filename=str(path / "sae.safetensors"),
-    #     device=str(device),
-    #     strict=decoder,
-    # )
-    ###########################################################################
     sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
 
-    weight_matrix_np = sae.W_dec.cpu().detach().numpy()
-
-    with torch.inference_mode():
-        reshaped_activations_A = sae.pre_acts(outputs.to("cuda"))
-        # reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
-        # orig = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
-
-    first_dim_reshaped = reshaped_activations_A.shape[0] * reshaped_activations_A.shape[1]
-    reshaped_activations_A = reshaped_activations_A.reshape(first_dim_reshaped, reshaped_activations_A.shape[-1]).cpu()
-
-    # return weight_matrix_np, reshaped_activations_A, orig
-    return weight_matrix_np, reshaped_activations_A
-
-
-# In[ ]:
-
-
-def get_weights_and_acts_byLayer(name, layer_id, outputs):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    hookpoint = "layers." + str(layer_id)
-
-    sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
-
-    weight_matrix_np = sae.W_dec.cpu().detach().numpy()
+    weight_matrix = sae.W_dec.cpu().detach().numpy()
 
     with torch.inference_mode():
         # reshaped_activations_A = sae.pre_acts(outputs.to("cuda"))
-        reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+        reshaped_activations = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
 
-    first_dim_reshaped = reshaped_activations_A.shape[0] * reshaped_activations_A.shape[1]
-    reshaped_activations_A = reshaped_activations_A.reshape(first_dim_reshaped, reshaped_activations_A.shape[-1]).cpu()
+    first_dim_reshaped = reshaped_activations.shape[0] * reshaped_activations.shape[1]
+    reshaped_activations = reshaped_activations.reshape(first_dim_reshaped, reshaped_activations.shape[-1]).cpu()
 
-    return weight_matrix_np, reshaped_activations_A
+    # return weight_matrix_np, reshaped_activations_A, orig
+    return weight_matrix, reshaped_activations
 
 
-# In[ ]:
+# In[30]:
 
 
 def count_zero_columns(tensor):
@@ -1813,35 +1799,28 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[ ]:
+# In[31]:
 
 
-def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
+def run_expm(layer_id, outputs, outputs_2):
     layer_to_dictscores = {}
 
     name = "EleutherAI/sae-pythia-70m-32k"
-    # cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": 512}
-    # weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, cfg_dict, layer_id, outputs)
-    weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, layer_id, outputs)
+    cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": 512}
+    weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, cfg_dict, layer_id, outputs)
     # zero_cols_count, zero_cols_indices = count_zero_columns(reshaped_activations_A.cpu().numpy())
     # print("Number of zero columns:", zero_cols_count) #, zero_cols_indices
 
     name = "EleutherAI/sae-pythia-160m-32k"
-    for layerID_2 in range(layer_start, layer_end): # 0, 12
+    for layerID_2 in range(0, 12): # 0, 12
         dictscores = {}
 
-        # cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": 768}
-        # weight_matrix_2, reshaped_activations_B = get_weights_and_acts(name, cfg_dict, layerID_2, outputs_2)
-        weight_matrix_2, reshaped_activations_B = get_weights_and_acts_byLayer(name, layerID_2, outputs_2)
+        # redef
+        cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": 768}
+        weight_matrix_2, reshaped_activations_B = get_weights_and_acts(name, cfg_dict, layerID_2, outputs_2)
 
-        """
-        `batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
-        highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
-        Use the list with smaller number of features (cols) as the second arg
-        """
+
         highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
-        # highest_correlations_indices_AB = highest_correlations_indices_AB.detach().cpu().numpy()
-        # highest_correlations_values_AB = highest_correlations_values_AB.detach().cpu().numpy()
 
         num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
         print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
@@ -1853,7 +1832,7 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
 
         sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
         # kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 100]
-        kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+        kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 1]
 
         filt_corr_ind_A = []
         filt_corr_ind_B = []
@@ -1892,16 +1871,15 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
 
         # # num_feats = len(filt_corr_ind_A)
         num_feats = len(new_highest_correlations_indices_A)
-        num_runs = 100
 
-        # dictscores["svcca_paired"] = svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
-        dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+        # # dictscores["svcca_paired"] = svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
+        # dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
 
-        dictscores["svcca_unpaired"] = score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats,
-                                                  svcca, shapereq_bool=True)
+        # dictscores["svcca_unpaired"] = score_rand(weight_matrix_np, weight_matrix_2, num_feats,
+        #                                           svcca, shapereq_bool=True)
 
         dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-        dictscores["rsa_unpaired"] = score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats,
+        dictscores["rsa_unpaired"] = score_rand(weight_matrix_np, weight_matrix_2, num_feats,
                                                   representational_similarity_analysis, shapereq_bool=True)
 
         print("Layer: " + str(layerID_2))
@@ -1915,7 +1893,7 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
 
 # # load data
 
-# In[ ]:
+# In[32]:
 
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -1924,7 +1902,7 @@ tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
 tokenizer.pad_token = tokenizer.eos_token
 
 
-# In[ ]:
+# In[33]:
 
 
 from datasets import load_dataset
@@ -1932,7 +1910,7 @@ from datasets import load_dataset
 dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
 
 
-# In[ ]:
+# In[34]:
 
 
 batch_size = 100
@@ -1957,7 +1935,7 @@ inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, ma
 
 # # load models
 
-# In[ ]:
+# In[35]:
 
 
 model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m")
@@ -1966,79 +1944,1709 @@ model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-160m")
 
 # ## get LLM actvs
 
-# In[ ]:
+# In[36]:
 
 
 with torch.inference_mode():
-    # outputs = model(**inputs, output_hidden_states=True)
+    outputs = model(**inputs, output_hidden_states=True)
     outputs_2 = model_2(**inputs, output_hidden_states=True)
 
-    # outputs = get_llm_actvs_batch(model, inputs, batch_size=100, maxseqlen=300)
-    # outputs_2 = get_llm_actvs_batch(model_2, inputs, batch_size=100, maxseqlen=300)
+
+# # concept keywords
+
+# In[37]:
 
 
-# # MLP 3
+keywords = {}
 
-# loop- 1-1
+keywords['numeric'] = [
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+    "hundred", "thousand", "million", "billion", "trillion",
+    "integer", "fraction", "decimal", "percentage", "ratio",
+    "numeral", "digit", "prime", "even", "odd",
+    "sum", "difference", "product", "factor", "multiple",
+    "total", "count", "measure", "dozen", "score", "unit"]
 
-# In[ ]:
+keywords['people'] = [
+    "man", "girl", "boy", "kid", "dad", "mom", "son", "sis", "bro",
+    "pal", "mate", "boss", "chief", "cop", "guide", "priest", "king",
+    "queen", "duke", "lord", "friend", "judge", "clerk", "coach", "team",
+    "crew", "staff", "nurse", "doc", "vet", "cook", "maid", "clown",
+    "star", "clan", "host", "guest", "peer", "guard", "boss", "spy",
+    "fool", "punk", "nerd", "jock", "chief", "folk", "crowd"]
+
+keywords['nature'] = [
+    "tree", "grass", "bush", "plant", "stone", "rock", "cliff", "hill",
+    "dirt", "sand", "mud", "wind", "storm", "rain", "cloud", "sun",
+    "moon", "star", "leaf", "branch", "twig", "root", "bark", "seed",
+    "wave", "tide", "lake", "pond", "creek", "sea", "wood", "field",
+    "shore", "snow", "ice", "flame", "fire", "fog", "dew", "hail",
+    "sky", "earth", "glade", "cave", "peak", "ridge", "dust", "air",
+    "mist", "heat"]
+
+keywords['science'] = [
+    "cell", "gene", "nerve", "brain", "blood", "bone", "heart", "lung",
+    "star", "space", "light", "mass", "force", "wave", "speed", "sound",
+    "time", "power", "heat", "cold", "charge", "spark", "flame", "bond",
+    "quark", "atom", "ion", "gas", "wind", "ice", "plant", "rock",
+    "probe", "test", "fact", "proof", "code", "law", "rule", "graph",
+    "scale", "scope", "lens", "ray", "line", "chart", "flux", "phase",
+    "shock", "pulse"]
+
+keywords['animals'] = [
+    "dog", "cat", "rat", "bat", "pig", "cow", "fox", "wolf", "ram", "eel",
+    "ant", "bee", "bug", "cub", "kit", "fawn", "calf", "colt", "foal",
+    "hen", "duck", "goat", "bird", "crow", "fish", "frog", "deer", "worm",
+    "moth", "gnat", "clam", "crab", "shrimp", "whale", "shark", "squid",
+    "pup", "joey", "owl", "hare", "seal", "mule", "toad", "swan", "sow",
+    "bull", "stag", "buck", "boar", "kite"
+]
 
 
-layer_id = 3
+# # run expm fn
+
+# In[88]:
+
+
+# def run_expm(layer_id, outputs, outputs_2):
+def run_semantic_subspace_expms(fList_model_B, outputs):
+    metric_dict = {'SVCCA': svcca, 'RSA': representational_similarity_analysis}
+    # map_type_list = ['manyTo1', '1To1']
+    map_type_list = ['1To1']
+    layer_to_dictscores = {}
+
+    name = "EleutherAI/sae-pythia-70m-32k"
+    for layerID_2 in range(0, 6):
+        print("Layer: " + str(layerID_2))
+        dictscores = {}
+
+        weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, layerID_2, outputs)
+
+        corr_inds, corr_vals = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+        sorted_feat_counts = Counter(corr_inds).most_common()
+        kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+
+        all_scores_dict = {}
+        for concept_name in keywords.keys():
+            print(concept_name)
+            scores_dict = {}
+
+            mixed_modA_feats, mixed_modB_feats = get_mixed_feats(fList_model_B, corr_inds, keywords[concept_name])
+            filt_corr_ind_A, filt_corr_ind_B, num_unq_pairs = filter_corr_pairs(mixed_modA_feats, mixed_modB_feats, kept_modA_feats)
+
+            scores_dict[f'num_unq_pairs'] = num_unq_pairs
+
+            for map_type in map_type_list:
+                print(map_type)
+                if map_type == '1To1':
+                    X_subset = weight_matrix_np[filt_corr_ind_A]
+                    Y_subset = weight_matrix_2[filt_corr_ind_B]
+                    num_feats = len(list(set(filt_corr_ind_A)))
+                else:
+                    X_subset = weight_matrix_np[mixed_modA_feats]
+                    Y_subset = weight_matrix_2[mixed_modB_feats]
+                    num_feats = len(list(set(mixed_modA_feats)))
+
+                scores_dict[f'mean_corr_{map_type}'] = get_new_mean_corr(mixed_modA_feats, mixed_modB_feats, corr_vals)
+
+                for metric_name, metric_fn in metric_dict.items():
+                    paired_score = metric_fn(X_subset, Y_subset, "nd")
+                    scores_dict[f'paired_{metric_name}_{map_type}'] = paired_score
+
+                    rand_corr_scores = score_rand_corr(100, weight_matrix_np, weight_matrix_2,
+                                    num_feats, corr_inds, metric_fn, True)
+                    scores_dict[f'rand_corr_mean_{metric_name}_{map_type}'] = sum(rand_corr_scores) / len(rand_corr_scores)
+                    scores_dict[f'rand_corr_pval_{metric_name}_{map_type}'] =  np.mean(np.array(rand_corr_scores) >= paired_score)
+
+                    rand_shuff_scores = shuffle_rand(100, X_subset, Y_subset, Y_subset.shape[0],
+                                                    metric_fn, shapereq_bool=True)
+                    scores_dict[f'rand_shuff_mean_{metric_name}_{map_type}'] = sum(rand_shuff_scores) / len(rand_shuff_scores)
+                    scores_dict[f'rand_shuff_pval_{metric_name}_{map_type}'] =  np.mean(np.array(rand_shuff_scores) >= paired_score)
+
+            all_scores_dict[concept_name] = scores_dict
+            print('\n')
+
+        # for key, value in all_scores_dict.items():
+        #     print(key + ": " + str(value))
+        # print("\n")
+
+        layer_to_dictscores[layerID_2] = all_scores_dict
+    return layer_to_dictscores
+
+
+# # loop for any layer pair: L10
+
+# In[39]:
+
+
+modeltype = 'pythia160m'
+name = "EleutherAI/sae-pythia-160m-32k"
+layer_id_2 = 10
+
+hookpoint = "layers." + str(layer_id_2)
+sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
 
 with torch.inference_mode():
-    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+    feature_acts_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id_2].to("cuda"))
+
+first_dim_reshaped = feature_acts_B.shape[0] * feature_acts_B.shape[1]
+reshaped_activations_B = feature_acts_B.reshape(first_dim_reshaped, feature_acts_B.shape[-1]).cpu()
+
+
+# In[40]:
+
+
+# store feature : lst of top strs
+fList_model_B = []
+samp_m = 5
+
+for feature_idx in range(feature_acts_B.shape[-1]):
+    if feature_idx % 5000 == 0:
+        print('Feature: ', feature_idx)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_B, feature_idx, samp_m, batch_tokens= inputs['input_ids'])
+    fList_model_B.append(store_top_toks(ds_top_acts_indices, ds_top_acts_values, inputs['input_ids']) )
+
+
+# In[41]:
+
+
+import pickle
+from google.colab import files
+with open(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(fList_model_B, f)
+files.download(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl')
+
+
+# In[42]:
+
+
+# with open('fList_model_B.pkl', 'rb') as f:
+#     fList_model_B = pickle.load(f)
+
+
+# In[45]:
+
+
+layer_to_dictscores = run_semantic_subspace_expms(fList_model_B, outputs)
+
+
+# In[46]:
+
+
+with open(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(layer_to_dictscores, f)
+files.download(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl')
+
+
+# ## analyze data: L0
+
+# In[52]:
+
+
+all_scores_dict = layer_to_dictscores[0]
 
 
 # In[ ]:
 
 
-layer_start = 0
-layer_end = len(model_2.gpt_neox.layers)
-layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
 
 
-# In[ ]:
+# In[53]:
 
 
-layer_to_dictscores
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
 
 
-# In[ ]:
+# In[54]:
 
 
-del outputs, outputs_2
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
 
 
-# ### plot
-
-# In[ ]:
+# In[55]:
 
 
-plot_svcca_byLayer(layer_to_dictscores)
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
 
 
-# In[ ]:
+# ## analyze data: L1
+
+# In[56]:
 
 
-plot_rsa_byLayer(layer_to_dictscores)
+all_scores_dict = layer_to_dictscores[1]
 
 
-# In[ ]:
+# In[57]:
 
 
-plot_meanCorr_filt_byLayer(layer_to_dictscores)
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
 
 
-# In[ ]:
+# In[58]:
 
 
-plot_meanCorr_byLayer(layer_to_dictscores)
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
 
 
-# In[ ]:
+# In[59]:
 
 
-for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_kept'])
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L2
+
+# In[60]:
+
+
+all_scores_dict = layer_to_dictscores[2]
+
+
+# In[61]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[62]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[63]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L3
+
+# In[64]:
+
+
+all_scores_dict = layer_to_dictscores[3]
+
+
+# In[65]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[66]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[67]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L4
+
+# In[68]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[69]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[70]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[71]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L5
+
+# In[72]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[73]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[74]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[75]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# # loop for any layer pair: L2
+
+# In[76]:
+
+
+modeltype = 'pythia160m'
+name = "EleutherAI/sae-pythia-160m-32k"
+layer_id_2 = 2
+
+hookpoint = "layers." + str(layer_id_2)
+sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    feature_acts_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id_2].to("cuda"))
+
+first_dim_reshaped = feature_acts_B.shape[0] * feature_acts_B.shape[1]
+reshaped_activations_B = feature_acts_B.reshape(first_dim_reshaped, feature_acts_B.shape[-1]).cpu()
+
+
+# In[77]:
+
+
+# store feature : lst of top strs
+fList_model_B = []
+samp_m = 5
+
+for feature_idx in range(feature_acts_B.shape[-1]):
+    if feature_idx % 5000 == 0:
+        print('Feature: ', feature_idx)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_B, feature_idx, samp_m, batch_tokens= inputs['input_ids'])
+    fList_model_B.append(store_top_toks(ds_top_acts_indices, ds_top_acts_values, inputs['input_ids']) )
+
+
+# In[78]:
+
+
+import pickle
+from google.colab import files
+with open(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(fList_model_B, f)
+files.download(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl')
+
+
+# In[79]:
+
+
+# with open('fList_model_B.pkl', 'rb') as f:
+#     fList_model_B = pickle.load(f)
+
+
+# In[89]:
+
+
+layer_to_dictscores = run_semantic_subspace_expms(fList_model_B, outputs)
+
+
+# In[90]:
+
+
+with open(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(layer_to_dictscores, f)
+files.download(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl')
+
+
+# ## analyze data: L0
+
+# In[91]:
+
+
+all_scores_dict = layer_to_dictscores[0]
+
+
+# In[92]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[93]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[94]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L1
+
+# In[95]:
+
+
+all_scores_dict = layer_to_dictscores[1]
+
+
+# In[96]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[97]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[98]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[99]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L2
+
+# In[100]:
+
+
+all_scores_dict = layer_to_dictscores[2]
+
+
+# In[101]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[102]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[103]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[104]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L3
+
+# In[105]:
+
+
+all_scores_dict = layer_to_dictscores[3]
+
+
+# In[106]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[107]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[108]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[109]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L4
+
+# In[110]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[111]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[112]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[113]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[114]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L5
+
+# In[115]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[116]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[117]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[118]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[119]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# # loop for any layer pair: L6
+
+# In[120]:
+
+
+modeltype = 'pythia160m'
+name = "EleutherAI/sae-pythia-160m-32k"
+layer_id_2 = 6
+
+hookpoint = "layers." + str(layer_id_2)
+sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    feature_acts_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id_2].to("cuda"))
+
+first_dim_reshaped = feature_acts_B.shape[0] * feature_acts_B.shape[1]
+reshaped_activations_B = feature_acts_B.reshape(first_dim_reshaped, feature_acts_B.shape[-1]).cpu()
+
+
+# In[121]:
+
+
+# store feature : lst of top strs
+fList_model_B = []
+samp_m = 5
+
+for feature_idx in range(feature_acts_B.shape[-1]):
+    if feature_idx % 5000 == 0:
+        print('Feature: ', feature_idx)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_B, feature_idx, samp_m, batch_tokens= inputs['input_ids'])
+    fList_model_B.append(store_top_toks(ds_top_acts_indices, ds_top_acts_values, inputs['input_ids']) )
+
+
+# In[122]:
+
+
+import pickle
+from google.colab import files
+with open(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(fList_model_B, f)
+files.download(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl')
+
+
+# In[123]:
+
+
+# with open('fList_model_B.pkl', 'rb') as f:
+#     fList_model_B = pickle.load(f)
+
+
+# In[124]:
+
+
+layer_to_dictscores = run_semantic_subspace_expms(fList_model_B, outputs)
+
+
+# In[125]:
+
+
+with open(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(layer_to_dictscores, f)
+files.download(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl')
+
+
+# ## analyze data: L0
+
+# In[126]:
+
+
+all_scores_dict = layer_to_dictscores[0]
+
+
+# In[127]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[128]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[129]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L1
+
+# In[130]:
+
+
+all_scores_dict = layer_to_dictscores[1]
+
+
+# In[131]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[132]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[133]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[134]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L2
+
+# In[135]:
+
+
+all_scores_dict = layer_to_dictscores[2]
+
+
+# In[136]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[137]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[138]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[139]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L3
+
+# In[140]:
+
+
+all_scores_dict = layer_to_dictscores[3]
+
+
+# In[141]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[142]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[143]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[144]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L4
+
+# In[145]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[146]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[147]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[148]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[149]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L5
+
+# In[150]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[151]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[152]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[153]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[154]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# # loop for any layer pair: L11
+
+# In[160]:
+
+
+modeltype = 'pythia160m'
+name = "EleutherAI/sae-pythia-160m-32k"
+layer_id_2 = 11
+
+hookpoint = "layers." + str(layer_id_2)
+sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+
+with torch.inference_mode():
+    feature_acts_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id_2].to("cuda"))
+
+first_dim_reshaped = feature_acts_B.shape[0] * feature_acts_B.shape[1]
+reshaped_activations_B = feature_acts_B.reshape(first_dim_reshaped, feature_acts_B.shape[-1]).cpu()
+
+
+# In[161]:
+
+
+# store feature : lst of top strs
+fList_model_B = []
+samp_m = 5
+
+for feature_idx in range(feature_acts_B.shape[-1]):
+    if feature_idx % 5000 == 0:
+        print('Feature: ', feature_idx)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_B, feature_idx, samp_m, batch_tokens= inputs['input_ids'])
+    fList_model_B.append(store_top_toks(ds_top_acts_indices, ds_top_acts_values, inputs['input_ids']) )
+
+
+# In[162]:
+
+
+import pickle
+from google.colab import files
+with open(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(fList_model_B, f)
+files.download(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl')
+
+
+# In[163]:
+
+
+# with open('fList_model_B.pkl', 'rb') as f:
+#     fList_model_B = pickle.load(f)
+
+
+# In[164]:
+
+
+layer_to_dictscores = run_semantic_subspace_expms(fList_model_B, outputs)
+
+
+# In[165]:
+
+
+with open(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
+    pickle.dump(layer_to_dictscores, f)
+files.download(f'layer_to_dictscores_L{layer_id_2}_{modeltype}.pkl')
+
+
+# ## analyze data: L0
+
+# In[166]:
+
+
+all_scores_dict = layer_to_dictscores[0]
+
+
+# In[167]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[168]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[169]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L1
+
+# In[170]:
+
+
+all_scores_dict = layer_to_dictscores[1]
+
+
+# In[171]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[172]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[173]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[174]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L2
+
+# In[175]:
+
+
+all_scores_dict = layer_to_dictscores[2]
+
+
+# In[176]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[177]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[178]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[179]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L3
+
+# In[180]:
+
+
+all_scores_dict = layer_to_dictscores[3]
+
+
+# In[181]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[182]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[183]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[184]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L4
+
+# In[185]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[186]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[187]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[188]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[189]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# ## analyze data: L5
+
+# In[190]:
+
+
+all_scores_dict = layer_to_dictscores[4]
+
+
+# In[191]:
+
+
+filtered_words = ['num_unq_pairs']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[192]:
+
+
+filtered_words = ['mean_corr']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index')
+display(df)
+
+
+# In[193]:
+
+
+filtered_words = ['1To1', 'SVCCA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+# Convert the filtered data into a DataFrame, with each key as a row
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
+
+
+# In[194]:
+
+
+filtered_words = ['1To1', 'RSA']
+filtered_data = {
+    key: {k: v for k, v in sub_dict.items() if all(word in k for word in filtered_words)}
+    for key, sub_dict in all_scores_dict.items()
+}
+df = pd.DataFrame.from_dict(filtered_data, orient='index').round(2)
+display(df)
 

@@ -1292,7 +1292,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[87]:
+# In[13]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1312,7 +1312,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[127]:
+# In[77]:
 
 
 import random
@@ -1326,7 +1326,34 @@ def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn,
         else:
             score = sim_fn(weight_matrix_np, weight_matrix_2[row_idxs])
         all_rand_scores.append(score)
-    return sum(all_rand_scores) / len(all_rand_scores)
+    # return sum(all_rand_scores) / len(all_rand_scores)
+    return all_rand_scores
+
+
+# In[67]:
+
+
+def score_rand_corr(num_runs, weight_matrix_np, weight_matrix_2, num_feats, highest_correlations_indices_AB, sim_fn, shapereq_bool):
+    all_rand_scores = []
+    i = 0
+    # for i in range(num_runs):
+    while i < num_runs:
+        try:
+            rand_modB_feats = np.random.choice(range(weight_matrix_2.shape[0]), size=num_feats, replace=False).tolist()
+            rand_modA_feats = [highest_correlations_indices_AB[index] for index in rand_modB_feats]
+
+            if shapereq_bool:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
+            else:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
+            all_rand_scores.append(score)
+            i += 1
+        except:
+            continue
+    # print(sum(all_rand_scores) / len(all_rand_scores))
+    # plt.hist(all_rand_scores)
+    # plt.show()
+    return all_rand_scores
 
 
 # ## plot fns
@@ -2020,7 +2047,7 @@ weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
 
 # ## corr
 
-# In[41]:
+# In[40]:
 
 
 """
@@ -2038,7 +2065,7 @@ print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
 sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
 
 
-# In[102]:
+# In[41]:
 
 
 sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
@@ -2060,7 +2087,7 @@ inputs["input_ids"][0, 0]
 tokenizer.decode(inputs["input_ids"][0, 0])
 
 
-# In[45]:
+# In[ ]:
 
 
 def store_top_sequences_asLst(top_acts_indices, top_acts_values, batch_tokens):
@@ -2102,7 +2129,7 @@ for feature_idx in range(feature_acts_B.shape[-1]):
 feature_top_samps_lst = [{"feature": feature, "strings": strings} for feature, strings in feat_snip_dict.items()]
 
 
-# In[263]:
+# In[ ]:
 
 
 import re
@@ -2161,12 +2188,12 @@ with open('fList_model_B.pkl', 'wb') as f:
 files.download('fList_model_B.pkl')
 
 
-# In[40]:
+# In[42]:
 
 
 import pickle
-# with open('fList_model_A.pkl', 'rb') as f:
-#     fList_model_A = pickle.load(f)
+with open('fList_model_A.pkl', 'rb') as f:
+    fList_model_A = pickle.load(f)
 with open('fList_model_B.pkl', 'rb') as f:
     fList_model_B = pickle.load(f)
 
@@ -2175,7 +2202,7 @@ with open('fList_model_B.pkl', 'rb') as f:
 
 # APPR1: match by most corr pair
 
-# In[46]:
+# In[ ]:
 
 
 samp_m = 5
@@ -2183,7 +2210,7 @@ samp_m = 5
 
 # ## she
 
-# In[88]:
+# In[ ]:
 
 
 keyword = "she"
@@ -2193,7 +2220,7 @@ X_subset = weight_matrix_np[modA_feats, :]
 Y_subset = weight_matrix_2[modB_feats, :]
 
 
-# In[89]:
+# In[ ]:
 
 
 for fID in range(len(modB_feats[:5])):
@@ -2211,7 +2238,7 @@ for fID in range(len(modB_feats[:5])):
     print('-'*50)
 
 
-# In[90]:
+# In[ ]:
 
 
 new_vals = []
@@ -2223,37 +2250,37 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
         new_vals.append(val)
 
 
-# In[91]:
+# In[ ]:
 
 
 len(new_vals)
 
 
-# In[92]:
+# In[ ]:
 
 
 sum(new_vals) / len(new_vals)
 
 
-# In[93]:
+# In[ ]:
 
 
 print(len(list(set(modB_feats))))
 
 
-# In[94]:
+# In[ ]:
 
 
 print(len(list(set(modA_feats))))
 
 
-# In[95]:
+# In[ ]:
 
 
 svcca(X_subset, Y_subset, "nd")
 
 
-# In[96]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2261,13 +2288,13 @@ score_rand(100, weight_matrix_np, weight_matrix_2, num_feats,
                                           svcca, shapereq_bool=True)
 
 
-# In[97]:
+# In[ ]:
 
 
 representational_similarity_analysis(X_subset, Y_subset, "nd")
 
 
-# In[99]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2277,7 +2304,7 @@ score_rand(100, weight_matrix_np, weight_matrix_2, num_feats,
 
 # ### 1-1 only
 
-# In[103]:
+# In[ ]:
 
 
 filt_corr_ind_A = []
@@ -2297,7 +2324,7 @@ print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
 print("num feats after filt: ", len(filt_corr_ind_A))
 
 
-# In[104]:
+# In[ ]:
 
 
 svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
@@ -2305,7 +2332,7 @@ svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
 
 # ## he
 
-# In[105]:
+# In[ ]:
 
 
 keyword = "he"
@@ -2315,7 +2342,7 @@ X_subset = weight_matrix_np[modA_feats, :]
 Y_subset = weight_matrix_2[modB_feats, :]
 
 
-# In[106]:
+# In[ ]:
 
 
 for fID in range(len(modB_feats[:5])):
@@ -2333,7 +2360,7 @@ for fID in range(len(modB_feats[:5])):
     print('-'*50)
 
 
-# In[107]:
+# In[ ]:
 
 
 new_vals = []
@@ -2345,37 +2372,37 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
         new_vals.append(val)
 
 
-# In[108]:
+# In[ ]:
 
 
 len(new_vals)
 
 
-# In[109]:
+# In[ ]:
 
 
 sum(new_vals) / len(new_vals)
 
 
-# In[110]:
+# In[ ]:
 
 
 print(len(list(set(modB_feats))))
 
 
-# In[111]:
+# In[ ]:
 
 
 print(len(list(set(modA_feats))))
 
 
-# In[112]:
+# In[ ]:
 
 
 svcca(X_subset, Y_subset, "nd")
 
 
-# In[113]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2383,13 +2410,13 @@ score_rand(100, weight_matrix_np, weight_matrix_2, num_feats,
                                           svcca, shapereq_bool=True)
 
 
-# In[114]:
+# In[ ]:
 
 
 representational_similarity_analysis(X_subset, Y_subset, "nd")
 
 
-# In[115]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2399,7 +2426,7 @@ score_rand(100, weight_matrix_np, weight_matrix_2, num_feats,
 
 # ## rand subset of 20 corr feats
 
-# In[116]:
+# In[ ]:
 
 
 modB_feats = list(range(20))
@@ -2426,7 +2453,7 @@ for fID in range(len(modB_feats[:5])):
     print('-'*50)
 
 
-# In[118]:
+# In[ ]:
 
 
 new_vals = []
@@ -2438,31 +2465,31 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
         new_vals.append(val)
 
 
-# In[120]:
+# In[ ]:
 
 
 sum(new_vals) / len(new_vals)
 
 
-# In[121]:
+# In[ ]:
 
 
 print(len(list(set(modB_feats))))
 
 
-# In[122]:
+# In[ ]:
 
 
 print(len(list(set(modA_feats))))
 
 
-# In[123]:
+# In[ ]:
 
 
 svcca(X_subset, Y_subset, "nd")
 
 
-# In[124]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2470,13 +2497,13 @@ score_rand(100, weight_matrix_np, weight_matrix_2, num_feats,
                                           svcca, shapereq_bool=True)
 
 
-# In[125]:
+# In[ ]:
 
 
 representational_similarity_analysis(X_subset, Y_subset, "nd")
 
 
-# In[126]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2486,7 +2513,7 @@ score_rand(100, weight_matrix_np, weight_matrix_2, num_feats,
 
 # ### shuffle subset pairing
 
-# In[130]:
+# In[ ]:
 
 
 shuffle_rand(100, X_subset, Y_subset, Y_subset.shape[0],
@@ -2495,7 +2522,7 @@ shuffle_rand(100, X_subset, Y_subset, Y_subset.shape[0],
 
 # ## rand subset of 1000 corr feats
 
-# In[141]:
+# In[ ]:
 
 
 modB_feats = list(range(1000))
@@ -2504,7 +2531,7 @@ X_subset = weight_matrix_np[modA_feats, :]
 Y_subset = weight_matrix_2[modB_feats, :]
 
 
-# In[142]:
+# In[ ]:
 
 
 for fID in range(len(modB_feats[:5])):
@@ -2522,7 +2549,7 @@ for fID in range(len(modB_feats[:5])):
     print('-'*50)
 
 
-# In[143]:
+# In[ ]:
 
 
 new_vals = []
@@ -2534,37 +2561,37 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
         new_vals.append(val)
 
 
-# In[144]:
+# In[ ]:
 
 
 len(new_vals)
 
 
-# In[79]:
+# In[ ]:
 
 
 sum(new_vals) / len(new_vals)
 
 
-# In[145]:
+# In[ ]:
 
 
 print(len(list(set(modB_feats))))
 
 
-# In[146]:
+# In[ ]:
 
 
 print(len(list(set(modA_feats))))
 
 
-# In[147]:
+# In[ ]:
 
 
 svcca(X_subset, Y_subset, "nd")
 
 
-# In[148]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2572,13 +2599,13 @@ score_rand(10, weight_matrix_np, weight_matrix_2, num_feats,
                                           svcca, shapereq_bool=True)
 
 
-# In[149]:
+# In[ ]:
 
 
 representational_similarity_analysis(X_subset, Y_subset, "nd")
 
 
-# In[150]:
+# In[ ]:
 
 
 num_feats = len(list(set(modA_feats)))
@@ -2588,7 +2615,7 @@ score_rand(10, weight_matrix_np, weight_matrix_2, num_feats,
 
 # ### shuffle subset pairing
 
-# In[151]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -2597,7 +2624,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### take more rand PAIRED subsets
 
-# In[163]:
+# In[ ]:
 
 
 scores = []
@@ -2613,19 +2640,19 @@ for i in range(10):
 sum(scores) / len(scores)
 
 
-# In[164]:
+# In[ ]:
 
 
 scores
 
 
-# In[165]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[166]:
+# In[ ]:
 
 
 new_vals = []
@@ -2638,7 +2665,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[167]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -2647,7 +2674,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ## combos of numerics
 
-# In[304]:
+# In[ ]:
 
 
 mixed_modA_feats = []
@@ -2672,7 +2699,7 @@ print( len(list(set(mixed_modA_feats))) )
 len(list(set(mixed_modB_feats)))
 
 
-# In[279]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
@@ -2682,7 +2709,7 @@ paired_svcca = svcca(X_subset, Y_subset, "nd")
 paired_svcca
 
 
-# In[184]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -2691,7 +2718,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### 1-1 only
 
-# In[289]:
+# In[ ]:
 
 
 filt_corr_ind_A = []
@@ -2710,7 +2737,7 @@ print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
 print("num feats after filt: ", len(filt_corr_ind_A))
 
 
-# In[283]:
+# In[ ]:
 
 
 svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
@@ -2718,7 +2745,7 @@ svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
 
 # ### take more rand PAIRED subsets
 
-# In[187]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -2734,14 +2761,14 @@ for i in range(1000):
 sum(scores) / len(scores)
 
 
-# In[188]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_svcca)
 p_value
 
 
-# In[192]:
+# In[ ]:
 
 
 import statistics
@@ -2749,7 +2776,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[193]:
+# In[ ]:
 
 
 import math
@@ -2759,13 +2786,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[189]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[190]:
+# In[ ]:
 
 
 new_vals = []
@@ -2778,7 +2805,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[191]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -2794,21 +2821,21 @@ X_subset = weight_matrix_np[mixed_modA_feats, :]
 Y_subset = weight_matrix_2[mixed_modB_feats, :]
 
 
-# In[249]:
+# In[ ]:
 
 
 paired_score = representational_similarity_analysis(X_subset, Y_subset, "nd")
 paired_score
 
 
-# In[250]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
                                           representational_similarity_analysis, shapereq_bool=True)
 
 
-# In[252]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -2824,14 +2851,14 @@ for i in range(1000):
 sum(scores) / len(scores)
 
 
-# In[253]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_score)
 p_value
 
 
-# In[254]:
+# In[ ]:
 
 
 import statistics
@@ -2839,7 +2866,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[255]:
+# In[ ]:
 
 
 import math
@@ -2849,13 +2876,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[256]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[257]:
+# In[ ]:
 
 
 new_vals = []
@@ -2868,7 +2895,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[258]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -2877,7 +2904,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ## combos of people-related
 
-# In[305]:
+# In[ ]:
 
 
 mixed_modA_feats = []
@@ -2901,7 +2928,7 @@ print( len(list(set(mixed_modA_feats))) )
 len(list(set(mixed_modB_feats)))
 
 
-# In[291]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
@@ -2911,7 +2938,7 @@ paired_svcca = svcca(X_subset, Y_subset, "nd")
 paired_svcca
 
 
-# In[198]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -2920,7 +2947,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### 1-1 only
 
-# In[292]:
+# In[ ]:
 
 
 filt_corr_ind_A = []
@@ -2939,7 +2966,7 @@ print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
 print("num feats after filt: ", len(filt_corr_ind_A))
 
 
-# In[293]:
+# In[ ]:
 
 
 svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
@@ -2947,7 +2974,7 @@ svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
 
 # ### take more rand PAIRED subsets
 
-# In[199]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -2963,14 +2990,14 @@ for i in range(100):
 sum(scores) / len(scores)
 
 
-# In[200]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_svcca)
 p_value
 
 
-# In[201]:
+# In[ ]:
 
 
 import statistics
@@ -2978,7 +3005,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[202]:
+# In[ ]:
 
 
 import math
@@ -2988,13 +3015,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[203]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[204]:
+# In[ ]:
 
 
 new_vals = []
@@ -3007,7 +3034,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[205]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3016,28 +3043,28 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### rsa
 
-# In[306]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
 Y_subset = weight_matrix_2[mixed_modB_feats, :]
 
 
-# In[307]:
+# In[ ]:
 
 
 paired_score = representational_similarity_analysis(X_subset, Y_subset, "nd")
 paired_score
 
 
-# In[308]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
                                           representational_similarity_analysis, shapereq_bool=True)
 
 
-# In[309]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -3053,14 +3080,14 @@ for i in range(1000):
 sum(scores) / len(scores)
 
 
-# In[310]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_score)
 p_value
 
 
-# In[311]:
+# In[ ]:
 
 
 import statistics
@@ -3068,7 +3095,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[312]:
+# In[ ]:
 
 
 import math
@@ -3078,13 +3105,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[313]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[314]:
+# In[ ]:
 
 
 new_vals = []
@@ -3097,7 +3124,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[315]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3106,7 +3133,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ## combos of nature-related
 
-# In[316]:
+# In[ ]:
 
 
 mixed_modA_feats = []
@@ -3131,7 +3158,7 @@ print( len(list(set(mixed_modA_feats))) )
 len(list(set(mixed_modB_feats)))
 
 
-# In[295]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
@@ -3141,7 +3168,7 @@ paired_svcca = svcca(X_subset, Y_subset, "nd")
 paired_svcca
 
 
-# In[208]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3150,7 +3177,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### 1-1 only
 
-# In[296]:
+# In[ ]:
 
 
 filt_corr_ind_A = []
@@ -3169,7 +3196,7 @@ print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
 print("num feats after filt: ", len(filt_corr_ind_A))
 
 
-# In[297]:
+# In[ ]:
 
 
 svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
@@ -3177,7 +3204,7 @@ svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
 
 # ### take more rand PAIRED subsets
 
-# In[209]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -3193,14 +3220,14 @@ for i in range(100):
 sum(scores) / len(scores)
 
 
-# In[210]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_svcca)
 p_value
 
 
-# In[212]:
+# In[ ]:
 
 
 import statistics
@@ -3208,7 +3235,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[213]:
+# In[ ]:
 
 
 import math
@@ -3218,13 +3245,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[214]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[215]:
+# In[ ]:
 
 
 new_vals = []
@@ -3237,7 +3264,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[216]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3246,28 +3273,28 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### rsa
 
-# In[317]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
 Y_subset = weight_matrix_2[mixed_modB_feats, :]
 
 
-# In[318]:
+# In[ ]:
 
 
 paired_score = representational_similarity_analysis(X_subset, Y_subset, "nd")
 paired_score
 
 
-# In[319]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
                                           representational_similarity_analysis, shapereq_bool=True)
 
 
-# In[320]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -3283,14 +3310,14 @@ for i in range(100):
 sum(scores) / len(scores)
 
 
-# In[321]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_score)
 p_value
 
 
-# In[322]:
+# In[ ]:
 
 
 import statistics
@@ -3298,7 +3325,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[323]:
+# In[ ]:
 
 
 import math
@@ -3308,13 +3335,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[324]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[325]:
+# In[ ]:
 
 
 new_vals = []
@@ -3327,7 +3354,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[326]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3336,7 +3363,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ## combos of science-related
 
-# In[327]:
+# In[ ]:
 
 
 mixed_modA_feats = []
@@ -3361,7 +3388,7 @@ print( len(list(set(mixed_modA_feats))) )
 len(list(set(mixed_modB_feats)))
 
 
-# In[218]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
@@ -3371,7 +3398,7 @@ paired_svcca = svcca(X_subset, Y_subset, "nd")
 paired_svcca
 
 
-# In[219]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3380,7 +3407,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### 1-1 only
 
-# In[299]:
+# In[ ]:
 
 
 filt_corr_ind_A = []
@@ -3399,7 +3426,7 @@ print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
 print("num feats after filt: ", len(filt_corr_ind_A))
 
 
-# In[300]:
+# In[ ]:
 
 
 svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
@@ -3407,7 +3434,7 @@ svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
 
 # ### take more rand PAIRED subsets
 
-# In[220]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -3423,14 +3450,14 @@ for i in range(100):
 sum(scores) / len(scores)
 
 
-# In[221]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_svcca)
 p_value
 
 
-# In[222]:
+# In[ ]:
 
 
 import statistics
@@ -3438,7 +3465,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[223]:
+# In[ ]:
 
 
 import math
@@ -3448,13 +3475,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[224]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[225]:
+# In[ ]:
 
 
 new_vals = []
@@ -3467,7 +3494,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[226]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3476,28 +3503,28 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### rsa
 
-# In[328]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
 Y_subset = weight_matrix_2[mixed_modB_feats, :]
 
 
-# In[329]:
+# In[ ]:
 
 
 paired_score = representational_similarity_analysis(X_subset, Y_subset, "nd")
 paired_score
 
 
-# In[330]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
                                           representational_similarity_analysis, shapereq_bool=True)
 
 
-# In[331]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -3513,14 +3540,14 @@ for i in range(100):
 sum(scores) / len(scores)
 
 
-# In[332]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_score)
 p_value
 
 
-# In[333]:
+# In[ ]:
 
 
 import statistics
@@ -3528,7 +3555,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[334]:
+# In[ ]:
 
 
 import math
@@ -3538,13 +3565,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[335]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[336]:
+# In[ ]:
 
 
 new_vals = []
@@ -3557,7 +3584,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[337]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3566,7 +3593,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ## combos of animal-related
 
-# In[338]:
+# In[ ]:
 
 
 mixed_modA_feats = []
@@ -3591,7 +3618,7 @@ print( len(list(set(mixed_modA_feats))) )
 len(list(set(mixed_modB_feats)))
 
 
-# In[229]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
@@ -3601,7 +3628,7 @@ paired_svcca = svcca(X_subset, Y_subset, "nd")
 paired_svcca
 
 
-# In[230]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3610,7 +3637,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### 1-1 only
 
-# In[302]:
+# In[ ]:
 
 
 filt_corr_ind_A = []
@@ -3629,7 +3656,7 @@ print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
 print("num feats after filt: ", len(filt_corr_ind_A))
 
 
-# In[303]:
+# In[ ]:
 
 
 svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
@@ -3637,7 +3664,7 @@ svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
 
 # ### take more rand PAIRED subsets
 
-# In[231]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -3653,14 +3680,14 @@ for i in range(100):
 sum(scores) / len(scores)
 
 
-# In[232]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_svcca)
 p_value
 
 
-# In[233]:
+# In[ ]:
 
 
 import statistics
@@ -3668,7 +3695,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[234]:
+# In[ ]:
 
 
 import math
@@ -3678,13 +3705,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[235]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[236]:
+# In[ ]:
 
 
 new_vals = []
@@ -3697,7 +3724,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[237]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3706,28 +3733,28 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ### rsa
 
-# In[339]:
+# In[ ]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats, :]
 Y_subset = weight_matrix_2[mixed_modB_feats, :]
 
 
-# In[340]:
+# In[ ]:
 
 
 paired_score = representational_similarity_analysis(X_subset, Y_subset, "nd")
 paired_score
 
 
-# In[341]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
                                           representational_similarity_analysis, shapereq_bool=True)
 
 
-# In[342]:
+# In[ ]:
 
 
 num_feats = len(list(set(mixed_modA_feats)))
@@ -3743,14 +3770,14 @@ for i in range(100):
 sum(scores) / len(scores)
 
 
-# In[343]:
+# In[ ]:
 
 
 p_value = np.mean(np.array(scores) >= paired_score)
 p_value
 
 
-# In[344]:
+# In[ ]:
 
 
 import statistics
@@ -3758,7 +3785,7 @@ variance_value = statistics.variance(scores)
 print(f"Variance: {variance_value}")
 
 
-# In[345]:
+# In[ ]:
 
 
 import math
@@ -3768,13 +3795,13 @@ standard_error = std_dev / math.sqrt(n)
 print(f"Standard Error: {standard_error}")
 
 
-# In[346]:
+# In[ ]:
 
 
 scores[-1]
 
 
-# In[347]:
+# In[ ]:
 
 
 new_vals = []
@@ -3787,7 +3814,7 @@ for ind_A, ind_B in zip(modA_feats, modB_feats):
 sum(new_vals) / len(new_vals)
 
 
-# In[348]:
+# In[ ]:
 
 
 shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
@@ -3800,7 +3827,7 @@ shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
 
 # ## get mod A labels
 
-# In[260]:
+# In[ ]:
 
 
 # store feature : lst of top strs
@@ -3814,13 +3841,13 @@ for feature_idx in range(feature_acts_A.shape[-1]):
     feat_snip_dict[feature_idx] = store_top_sequences_asLst(ds_top_acts_indices, ds_top_acts_values, inputs["input_ids"])
 
 
-# In[261]:
+# In[ ]:
 
 
 feature_top_samps_lst = [{"feature": feature, "strings": strings} for feature, strings in feat_snip_dict.items()]
 
 
-# In[264]:
+# In[ ]:
 
 
 fList_model_A = []
@@ -3832,13 +3859,13 @@ for feat_dict in feature_top_samps_lst:
     fList_model_A.append(out_str)
 
 
-# In[266]:
+# In[ ]:
 
 
 from google.colab import files
 
 
-# In[267]:
+# In[ ]:
 
 
 with open('feat_snip_dict_A.pkl', 'wb') as f:
@@ -4047,7 +4074,7 @@ p_value
 
 # ## combos of numerics
 
-# In[268]:
+# In[45]:
 
 
 mixed_modA_feats = []
@@ -4068,11 +4095,13 @@ for kw in keywords:
     mixed_modA_feats.extend(modA_feats)
     mixed_modB_feats.extend(modB_feats)
 
+mixed_modA_feats = list(set(mixed_modA_feats))
+mixed_modB_feats = list(set(mixed_modB_feats))
 print( len(list(set(mixed_modA_feats))) )
 len(list(set(mixed_modB_feats)))
 
 
-# In[274]:
+# In[63]:
 
 
 subset_inds, subset_vals = batched_correlation(reshaped_activations_A[:, mixed_modA_feats],
@@ -4085,7 +4114,7 @@ print("% unique: ", num_unq_pairs / len(subset_inds))
 sum(subset_vals) / len(subset_vals)
 
 
-# In[271]:
+# In[72]:
 
 
 X_subset = weight_matrix_np[mixed_modA_feats]
@@ -4095,29 +4124,9 @@ paired_svcca = svcca(X_subset[subset_inds], Y_subset, "nd")
 paired_svcca
 
 
-# In[272]:
-
-
-subset_inds, subset_vals = batched_correlation(reshaped_activations_B[:, mixed_modB_feats],
-                                               reshaped_activations_A[:, mixed_modA_feats])
-subset_inds = subset_inds.detach().cpu().numpy()
-subset_vals = subset_vals.detach().cpu().numpy()
-
-num_unq_pairs = len(list(set(subset_inds)))
-print("% unique: ", num_unq_pairs / len(subset_inds))
-sum(subset_vals) / len(subset_vals)
-
-
-# In[273]:
-
-
-paired_svcca = svcca(X_subset, Y_subset[subset_inds], "nd")
-paired_svcca
-
-
 # ### 1-1 only
 
-# In[276]:
+# In[65]:
 
 
 subset_sorted_feat_counts = Counter(subset_inds).most_common()
@@ -4138,10 +4147,309 @@ num_unq_pairs = len(list(set(filt_corr_ind_A)))
 print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
 
 
-# In[277]:
+# In[79]:
+
+
+paired_score = svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
+paired_score
+
+
+# In[78]:
+
+
+X_subset = weight_matrix_np[filt_corr_ind_A]
+Y_subset = weight_matrix_2[filt_corr_ind_B]
+
+all_rand_scores = shuffle_rand(100, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# In[80]:
+
+
+np.mean(np.array(all_rand_scores) >= paired_score)
+
+
+# In[76]:
+
+
+num_feats = len(list(set(filt_corr_ind_A)))
+score_rand(10, weight_matrix_np, weight_matrix_2, num_feats, svcca, True)
+
+
+# ### manyBto1A
+
+# In[56]:
+
+
+subset_inds, subset_vals = batched_correlation(reshaped_activations_B[:, mixed_modB_feats],
+                                               reshaped_activations_A[:, mixed_modA_feats])
+subset_inds = subset_inds.detach().cpu().numpy()
+subset_vals = subset_vals.detach().cpu().numpy()
+
+num_unq_pairs = len(list(set(subset_inds)))
+print("% unique: ", num_unq_pairs / len(subset_inds))
+sum(subset_vals) / len(subset_vals)
+
+
+# In[57]:
+
+
+X_subset = weight_matrix_np[mixed_modA_feats]
+Y_subset = weight_matrix_2[mixed_modB_feats]
+paired_svcca = svcca(X_subset, Y_subset[subset_inds], "nd")
+paired_svcca
+
+
+# #### 1-1 only
+
+# In[60]:
+
+
+subset_sorted_feat_counts = Counter(subset_inds).most_common()
+subset_kept_modB_feats = [feat_ID for feat_ID, count in subset_sorted_feat_counts if count <= 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_A, ind_B in enumerate(subset_inds):
+    if ind_B in subset_kept_modB_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+    elif ind_B not in seen:  # only keep one if it's over count X
+        seen.add(ind_B)
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+num_unq_pairs = len(list(set(filt_corr_ind_A)))
+print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+
+
+# In[61]:
 
 
 svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
+
+
+# In[62]:
+
+
+X_subset = weight_matrix_np[filt_corr_ind_A]
+Y_subset = weight_matrix_2[filt_corr_ind_B]
+
+shuffle_rand(10, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+
+
+# ## combos of people
+
+# In[89]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+keywords = [
+    "man", "girl", "boy", "kid", "dad", "mom", "son", "sis", "bro",
+    "pal", "mate", "boss", "chief", "cop", "guide", "priest", "king",
+    "queen", "duke", "lord", "friend", "judge", "clerk", "coach", "team",
+    "crew", "staff", "nurse", "doc", "vet", "cook", "maid", "clown",
+    "star", "clan", "host", "guest", "peer", "guard", "boss", "spy",
+    "fool", "punk", "nerd", "jock", "chief", "folk", "crowd"
+]
+
+for kw in keywords:
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = find_indices_with_keyword(fList_model_A, kw)
+    mixed_modA_feats.extend(modA_feats)
+    mixed_modB_feats.extend(modB_feats)
+
+mixed_modA_feats = list(set(mixed_modA_feats))
+mixed_modB_feats = list(set(mixed_modB_feats))
+print( len(list(set(mixed_modA_feats))) )
+len(list(set(mixed_modB_feats)))
+
+
+# In[90]:
+
+
+subset_inds, subset_vals = batched_correlation(reshaped_activations_A[:, mixed_modA_feats],
+                                               reshaped_activations_B[:, mixed_modB_feats])
+subset_inds = subset_inds.detach().cpu().numpy()
+subset_vals = subset_vals.detach().cpu().numpy()
+
+num_unq_pairs = len(list(set(subset_inds)))
+print("% unique: ", num_unq_pairs / len(subset_inds))
+sum(subset_vals) / len(subset_vals)
+
+
+# In[91]:
+
+
+X_subset = weight_matrix_np[mixed_modA_feats]
+Y_subset = weight_matrix_2[mixed_modB_feats]
+
+paired_svcca = svcca(X_subset[subset_inds], Y_subset, "nd")
+paired_svcca
+
+
+# ### 1-1 only
+
+# In[97]:
+
+
+subset_sorted_feat_counts = Counter(subset_inds).most_common()
+subset_kept_modA_feats = [feat_ID for feat_ID, count in subset_sorted_feat_counts if count == 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(subset_inds):
+    if ind_A in subset_kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+    elif ind_A not in seen:  # only keep one if it's over count X
+        seen.add(ind_A)
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+num_unq_pairs = len(list(set(filt_corr_ind_A)))
+print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+
+
+# In[98]:
+
+
+paired_score = svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
+paired_score
+
+
+# In[94]:
+
+
+X_subset = weight_matrix_np[filt_corr_ind_A]
+Y_subset = weight_matrix_2[filt_corr_ind_B]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# In[95]:
+
+
+np.mean(np.array(all_rand_scores) >= paired_score)
+
+
+# In[96]:
+
+
+num_feats = len(list(set(filt_corr_ind_A)))
+score_rand(10, weight_matrix_np, weight_matrix_2, num_feats, svcca, True)
+
+
+# ## combos of nature
+
+# In[99]:
+
+
+mixed_modA_feats = []
+mixed_modB_feats = []
+keywords = [
+    "tree", "grass", "bush", "plant", "stone", "rock", "cliff", "hill",
+    "dirt", "sand", "mud", "wind", "storm", "rain", "cloud", "sun",
+    "moon", "star", "leaf", "branch", "twig", "root", "bark", "seed",
+    "wave", "tide", "lake", "pond", "creek", "sea", "wood", "field",
+    "shore", "snow", "ice", "flame", "fire", "fog", "dew", "hail",
+    "sky", "earth", "glade", "cave", "peak", "ridge", "dust", "air",
+    "mist", "heat"
+]
+
+for kw in keywords:
+    modB_feats = find_indices_with_keyword(fList_model_B, kw)
+    modA_feats = find_indices_with_keyword(fList_model_A, kw)
+    mixed_modA_feats.extend(modA_feats)
+    mixed_modB_feats.extend(modB_feats)
+
+mixed_modA_feats = list(set(mixed_modA_feats))
+mixed_modB_feats = list(set(mixed_modB_feats))
+print( len(list(set(mixed_modA_feats))) )
+len(list(set(mixed_modB_feats)))
+
+
+# In[100]:
+
+
+subset_inds, subset_vals = batched_correlation(reshaped_activations_A[:, mixed_modA_feats],
+                                               reshaped_activations_B[:, mixed_modB_feats])
+subset_inds = subset_inds.detach().cpu().numpy()
+subset_vals = subset_vals.detach().cpu().numpy()
+
+num_unq_pairs = len(list(set(subset_inds)))
+print("% unique: ", num_unq_pairs / len(subset_inds))
+sum(subset_vals) / len(subset_vals)
+
+
+# In[101]:
+
+
+X_subset = weight_matrix_np[mixed_modA_feats]
+Y_subset = weight_matrix_2[mixed_modB_feats]
+
+paired_svcca = svcca(X_subset[subset_inds], Y_subset, "nd")
+paired_svcca
+
+
+# ### 1-1 only
+
+# In[102]:
+
+
+subset_sorted_feat_counts = Counter(subset_inds).most_common()
+subset_kept_modA_feats = [feat_ID for feat_ID, count in subset_sorted_feat_counts if count == 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(subset_inds):
+    if ind_A in subset_kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+    elif ind_A not in seen:  # only keep one if it's over count X
+        seen.add(ind_A)
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+num_unq_pairs = len(list(set(filt_corr_ind_A)))
+print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+
+
+# In[103]:
+
+
+paired_score = svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
+paired_score
+
+
+# In[104]:
+
+
+X_subset = weight_matrix_np[filt_corr_ind_A]
+Y_subset = weight_matrix_2[filt_corr_ind_B]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+sum(all_rand_scores) / len(all_rand_scores)
+
+
+# In[105]:
+
+
+np.mean(np.array(all_rand_scores) >= paired_score)
+
+
+# In[106]:
+
+
+num_feats = len(list(set(filt_corr_ind_A)))
+score_rand(10, weight_matrix_np, weight_matrix_2, num_feats, svcca, True)
 
 
 # # compare feats A "she" by corrB vs search
@@ -4284,7 +4592,7 @@ for fID in range(10):
 # svcca(reshaped_activations_A[:30000].t(), reshaped_activations_B[:30000].t(), "nd")
 
 
-# In[168]:
+# In[ ]:
 
 
 reshaped_activations_A[:1000].t().shape
@@ -4296,13 +4604,13 @@ reshaped_activations_A[:1000].t().shape
 svcca(reshaped_activations_A[:1000].t(), reshaped_activations_B[:1000].t(), "nd")
 
 
-# In[169]:
+# In[ ]:
 
 
 svcca(reshaped_activations_A[:1000].t()[highest_correlations_indices_AB], reshaped_activations_B[:1000].t(), "nd")
 
 
-# In[170]:
+# In[ ]:
 
 
 svcca(reshaped_activations_A[:5000].t()[highest_correlations_indices_AB], reshaped_activations_B[:5000].t(), "nd")

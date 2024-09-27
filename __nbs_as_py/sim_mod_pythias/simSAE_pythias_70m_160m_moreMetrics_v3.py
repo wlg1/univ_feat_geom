@@ -1333,28 +1333,40 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
     all_rand_scores = []
-    for i in range(num_runs):
-        rand_modA_feats = np.random.randint(low=0, high=weight_matrix_np.shape[0], size=num_feats).tolist()
-        rand_modB_feats = np.random.randint(low=0, high=weight_matrix_2.shape[0], size=num_feats).tolist()
+    i = 0
+    # for i in range(num_runs):
+    while i < num_runs:
+        try:
+            rand_modA_feats = np.random.choice(range(weight_matrix_np.shape[0]), size=num_feats, replace=False).tolist()
+            rand_modB_feats = np.random.choice(range(weight_matrix_2.shape[0]), size=num_feats, replace=False).tolist()
 
-        if shapereq_bool:
-            score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
-        else:
-            score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
-        all_rand_scores.append(score)
-    # print(sum(all_rand_scores) / len(all_rand_scores))
-    # plt.hist(all_rand_scores)
-    # plt.show()
+            if shapereq_bool:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats], "nd")
+            else:
+                score = sim_fn(weight_matrix_np[rand_modA_feats], weight_matrix_2[rand_modB_feats])
+            all_rand_scores.append(score)
+            i += 1
+        except:
+            continue
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
 # In[ ]:
 
 
-# import random
-# row_idxs = list(range(weight_matrix_2.shape[0]))
-# random.shuffle(row_idxs)
-# jaccard_similarity(weight_matrix_np, weight_matrix_2[row_idxs])
+import random
+def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
+    all_rand_scores = []
+    for i in range(num_runs):
+        row_idxs = list(range(num_feats))
+        random.shuffle(row_idxs)
+        if shapereq_bool:
+            score = sim_fn(weight_matrix_np, weight_matrix_2[row_idxs], "nd")
+        else:
+            score = sim_fn(weight_matrix_np, weight_matrix_2[row_idxs])
+        all_rand_scores.append(score)
+    # return sum(all_rand_scores) / len(all_rand_scores)
+    return all_rand_scores
 
 
 # ## plot fns
@@ -1369,7 +1381,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
 
     layers = [f'L{i}' for i in range(0, 12)]
     paired_values = [layer_to_dictscores[i]['svcca_paired'] for i in range(0, 12)]
-    unpaired_values = [layer_to_dictscores[i]['svcca_unpaired'] for i in range(0, 12)]
+    unpaired_values = [layer_to_dictscores[i]['svcca_rand_mean'] for i in range(0, 12)]
 
     # Plotting configuration
     x = np.arange(len(layers))  # label locations
@@ -1420,7 +1432,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
 
     layers = [f'L{i}' for i in range(0, 12)]
     paired_values = [layer_to_dictscores[i]['rsa_paired'] for i in range(0, 12)]
-    unpaired_values = [layer_to_dictscores[i]['rsa_unpaired'] for i in range(0, 12)]
+    unpaired_values = [layer_to_dictscores[i]['rsa_rand_mean'] for i in range(0, 12)]
 
     # Plotting configuration
     x = np.arange(len(layers))  # label locations
@@ -1820,18 +1832,12 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
     layer_to_dictscores = {}
 
     name = "EleutherAI/sae-pythia-70m-32k"
-    # cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": 512}
-    # weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, cfg_dict, layer_id, outputs)
     weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, layer_id, outputs)
-    # zero_cols_count, zero_cols_indices = count_zero_columns(reshaped_activations_A.cpu().numpy())
-    # print("Number of zero columns:", zero_cols_count) #, zero_cols_indices
 
     name = "EleutherAI/sae-pythia-160m-32k"
     for layerID_2 in range(layer_start, layer_end): # 0, 12
         dictscores = {}
 
-        # cfg_dict = {"expansion_factor": 32, "normalize_decoder": True, "num_latents": 32768, "k": 16, "d_in": 768}
-        # weight_matrix_2, reshaped_activations_B = get_weights_and_acts(name, cfg_dict, layerID_2, outputs_2)
         weight_matrix_2, reshaped_activations_B = get_weights_and_acts_byLayer(name, layerID_2, outputs_2)
 
         """
@@ -1840,11 +1846,9 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
         Use the list with smaller number of features (cols) as the second arg
         """
         highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
-        # highest_correlations_indices_AB = highest_correlations_indices_AB.detach().cpu().numpy()
-        # highest_correlations_values_AB = highest_correlations_values_AB.detach().cpu().numpy()
 
-        num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
-        print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
+        # num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
+        # print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
 
         dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
 
@@ -1890,19 +1894,23 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
         ###########
         # sim tests
 
-        # # num_feats = len(filt_corr_ind_A)
         num_feats = len(new_highest_correlations_indices_A)
         num_runs = 100
 
-        # dictscores["svcca_paired"] = svcca(weight_matrix_np[filt_corr_ind_A], weight_matrix_2[filt_corr_ind_B], "nd")
         dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
 
-        dictscores["svcca_unpaired"] = score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats,
-                                                  svcca, shapereq_bool=True)
+        rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
+                                    weight_matrix_2[new_highest_correlations_indices_B], num_feats,
+                                    svcca, shapereq_bool=True)
+        dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
+        dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
 
         dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-        dictscores["rsa_unpaired"] = score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats,
-                                                  representational_similarity_analysis, shapereq_bool=True)
+        rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
+                                                    weight_matrix_2[new_highest_correlations_indices_B], num_feats,
+                                                    representational_similarity_analysis, shapereq_bool=True)
+        dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
+        dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
 
         print("Layer: " + str(layerID_2))
         for key, value in dictscores.items():
