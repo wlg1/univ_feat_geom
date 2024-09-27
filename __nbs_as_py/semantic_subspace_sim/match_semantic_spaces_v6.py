@@ -5,20 +5,20 @@
 
 # # setup
 
-# In[ ]:
+# In[1]:
 
 
 # from google.colab import drive
 # drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[2]:
 
 
 get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
 
 
-# In[ ]:
+# In[3]:
 
 
 # you should load this before cloning repo files
@@ -30,7 +30,7 @@ from sae.utils import decoder_impl
 from sae import Sae
 
 
-# In[ ]:
+# In[4]:
 
 
 import pickle
@@ -52,7 +52,7 @@ from safetensors.torch import load_model, save_model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# In[ ]:
+# In[5]:
 
 
 from collections import Counter
@@ -62,7 +62,7 @@ from IPython.display import display
 
 # ## corr fns
 
-# In[ ]:
+# In[6]:
 
 
 def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
@@ -101,7 +101,7 @@ def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_si
     return corr_inds, corr_vals
 
 
-# In[ ]:
+# In[7]:
 
 
 def filter_corr_pairs(mixed_modA_feats, mixed_modB_feats, kept_modA_feats):
@@ -122,7 +122,7 @@ def filter_corr_pairs(mixed_modA_feats, mixed_modB_feats, kept_modA_feats):
     return filt_corr_ind_A, filt_corr_ind_B, num_unq_pairs
 
 
-# In[ ]:
+# In[8]:
 
 
 def get_new_mean_corr(modA_feats, modB_feats, corr_vals):
@@ -140,7 +140,7 @@ def get_new_mean_corr(modA_feats, modB_feats, corr_vals):
 
 # ## sim fns
 
-# In[ ]:
+# In[9]:
 
 
 import functools
@@ -246,7 +246,7 @@ class Pipeline:
         )
 
 
-# In[ ]:
+# In[10]:
 
 
 from typing import List, Set, Union
@@ -303,7 +303,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[ ]:
+# In[11]:
 
 
 import functools
@@ -630,7 +630,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[ ]:
+# In[12]:
 
 
 import scipy.optimize
@@ -652,7 +652,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[ ]:
+# In[13]:
 
 
 from typing import Optional
@@ -743,7 +743,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[ ]:
+# In[14]:
 
 
 ##################################################################################
@@ -1334,7 +1334,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[ ]:
+# In[15]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1357,7 +1357,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[ ]:
+# In[16]:
 
 
 def score_rand_corr(num_runs, weight_matrix_np, weight_matrix_2, num_feats, highest_correlations_indices_AB, sim_fn, shapereq_bool):
@@ -1383,7 +1383,7 @@ def score_rand_corr(num_runs, weight_matrix_np, weight_matrix_2, num_feats, high
     return all_rand_scores
 
 
-# In[ ]:
+# In[17]:
 
 
 import random
@@ -1403,7 +1403,7 @@ def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn,
 
 # ## plot fns
 
-# In[ ]:
+# In[18]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
@@ -1454,7 +1454,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[19]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
@@ -1505,7 +1505,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[20]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
@@ -1556,7 +1556,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[21]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
@@ -1593,7 +1593,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[22]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
@@ -1630,7 +1630,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[23]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1682,7 +1682,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[ ]:
+# In[24]:
 
 
 def highest_activating_tokens(
@@ -1710,7 +1710,7 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
 
 
-# In[ ]:
+# In[25]:
 
 
 def store_top_toks(top_acts_indices, top_acts_values, batch_tokens):
@@ -1721,7 +1721,7 @@ def store_top_toks(top_acts_indices, top_acts_values, batch_tokens):
     return feat_samps
 
 
-# In[ ]:
+# In[26]:
 
 
 def find_indices_with_keyword(fList, keyword):
@@ -1746,7 +1746,7 @@ def find_indices_with_keyword(fList, keyword):
     return index_list
 
 
-# In[ ]:
+# In[27]:
 
 
 from rich import print as rprint
@@ -1772,7 +1772,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
     rprint(s)
 
 
-# In[ ]:
+# In[28]:
 
 
 # def store_top_seqs(top_acts_indices, top_acts_values, batch_tokens):
@@ -1793,7 +1793,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
 #     return feat_samps
 
 
-# In[ ]:
+# In[29]:
 
 
 # def find_indices_with_keyword_bySeqs(fList_seqs, keyword):
@@ -1812,7 +1812,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
 #     return feat_list
 
 
-# In[ ]:
+# In[30]:
 
 
 # def store_top_seqs(top_acts_indices, top_acts_values, batch_tokens):
@@ -1879,7 +1879,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
 #     return feat_list
 
 
-# In[ ]:
+# In[31]:
 
 
 def store_top_seqs(top_acts_indices, top_acts_values, batch_tokens):
@@ -1900,7 +1900,7 @@ def store_top_seqs(top_acts_indices, top_acts_values, batch_tokens):
     return feat_samps
 
 
-# In[ ]:
+# In[32]:
 
 
 def find_indices_with_keyword_bySeqs(fList_seqs, keyword):
@@ -1927,7 +1927,7 @@ def find_indices_with_keyword_bySeqs(fList_seqs, keyword):
 
 # ## get concept space features
 
-# In[ ]:
+# In[33]:
 
 
 def get_mixed_feats(fList_model_B, corr_inds, keywords):
@@ -1954,7 +1954,7 @@ def get_mixed_feats(fList_model_B, corr_inds, keywords):
     return mixed_modA_feats, mixed_modB_feats
 
 
-# In[ ]:
+# In[34]:
 
 
 def get_mixed_feats_with_kwList(fList_model_B, corr_inds, keywords):
@@ -1985,7 +1985,7 @@ def get_mixed_feats_with_kwList(fList_model_B, corr_inds, keywords):
 
 # ## get actv fns
 
-# In[ ]:
+# In[35]:
 
 
 # def get_weights_and_acts(name, cfg_dict, layer_id, outputs):
@@ -2008,7 +2008,7 @@ def get_weights_and_acts(name, layer_id, outputs):
     return weight_matrix, reshaped_activations
 
 
-# In[ ]:
+# In[36]:
 
 
 def count_zero_columns(tensor):
@@ -2021,7 +2021,7 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[ ]:
+# In[37]:
 
 
 def run_expm(layer_id, outputs, outputs_2):
@@ -2115,7 +2115,7 @@ def run_expm(layer_id, outputs, outputs_2):
 
 # # load data
 
-# In[ ]:
+# In[38]:
 
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -2124,7 +2124,7 @@ tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
 tokenizer.pad_token = tokenizer.eos_token
 
 
-# In[ ]:
+# In[39]:
 
 
 from datasets import load_dataset
@@ -2132,7 +2132,7 @@ from datasets import load_dataset
 dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
 
 
-# In[ ]:
+# In[40]:
 
 
 batch_size = 100
@@ -2157,7 +2157,7 @@ inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, ma
 
 # # load models
 
-# In[ ]:
+# In[41]:
 
 
 model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m")
@@ -2166,7 +2166,7 @@ model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-160m")
 
 # ## get LLM actvs
 
-# In[ ]:
+# In[42]:
 
 
 with torch.inference_mode():
@@ -2178,7 +2178,7 @@ with torch.inference_mode():
 
 # ## sae actvs
 
-# In[ ]:
+# In[43]:
 
 
 layer_id = 3
@@ -2191,20 +2191,20 @@ with torch.inference_mode():
     feature_acts_A = sae.pre_acts(outputs.hidden_states[layer_id].to('cuda'))
 
 
-# In[ ]:
+# In[44]:
 
 
 first_dim_reshaped = feature_acts_A.shape[0] * feature_acts_A.shape[1]
 reshaped_activations_A = feature_acts_A.reshape(first_dim_reshaped, feature_acts_A.shape[-1]).cpu()
 
 
-# In[ ]:
+# In[45]:
 
 
 weight_matrix_np = sae.W_dec.cpu().detach().numpy()
 
 
-# In[ ]:
+# In[46]:
 
 
 layer_id_2 = 5
@@ -2213,21 +2213,21 @@ hookpoint = "layers." + str(layer_id_2)
 sae_2 = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
 
 
-# In[ ]:
+# In[47]:
 
 
 with torch.inference_mode():
     feature_acts_B = sae_2.pre_acts(outputs_2.hidden_states[layer_id_2].to("cuda"))
 
 
-# In[ ]:
+# In[48]:
 
 
 first_dim_reshaped = feature_acts_B.shape[0] * feature_acts_B.shape[1]
 reshaped_activations_B = feature_acts_B.reshape(first_dim_reshaped, feature_acts_B.shape[-1]).cpu()
 
 
-# In[ ]:
+# In[49]:
 
 
 weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
@@ -2339,6 +2339,31 @@ modeltype = 'pythia160m'
 with open(f'fList_L{layer_id_2}_{modeltype}.pkl', 'wb') as f:
     pickle.dump(fList_model_B_seqs, f)
 files.download(f'fList_L{layer_id_2}_{modeltype}.pkl')
+
+
+# ## load labels
+
+# In[50]:
+
+
+import pickle
+from google.colab import files
+
+
+# In[51]:
+
+
+modeltype = 'pythia70m'
+with open(f'fList_model_A_L{layer_id}_{modeltype}.pkl', 'rb') as f:
+    fList_model_A_seqs = pickle.load(f)
+
+
+# In[52]:
+
+
+modeltype = 'pythia160m'
+with open(f'fList_model_B_L{layer_id_2}_{modeltype}.pkl', 'rb') as f:
+    fList_model_B_seqs = pickle.load(f)
 
 
 # # famous names
@@ -5011,6 +5036,765 @@ len(sorted_kw_counts) # num unique keywords
 
 
 # In[ ]:
+
+
+for rankID in range(len(sorted_kw_counts)):
+    feat_ID = sorted_kw_counts[rankID][0]
+    print("keyword: ", feat_ID, "| Count: ", sorted_kw_counts[rankID][1])
+
+
+# # month names
+
+# In[53]:
+
+
+new_keywords = [
+    "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+]
+
+
+# In[54]:
+
+
+len(new_keywords)
+
+
+# In[55]:
+
+
+mixed_modA_feats = set()
+mixed_modB_feats = set()
+for kw in new_keywords:
+    modB_feats = find_indices_with_keyword_bySeqs(fList_model_B_seqs, kw)
+    modA_feats = find_indices_with_keyword_bySeqs(fList_model_A_seqs, kw)
+    mixed_modA_feats.update(modA_feats)
+    mixed_modB_feats.update(modB_feats)
+
+mixed_modA_feats = list(mixed_modA_feats)
+mixed_modB_feats = list(mixed_modB_feats)
+
+
+# In[56]:
+
+
+print(len(mixed_modA_feats))
+print(len(mixed_modB_feats))
+
+
+# ## run 1-1
+
+# In[57]:
+
+
+subset_inds, subset_vals = batched_correlation(reshaped_activations_A[:, mixed_modA_feats],
+                                               reshaped_activations_B[:, mixed_modB_feats])
+
+num_unq_pairs = len(list(set(subset_inds)))
+print("% unique: ", num_unq_pairs / len(subset_inds))
+print(num_unq_pairs)
+sum(subset_vals) / len(subset_vals)
+
+
+# In[58]:
+
+
+subset_sorted_feat_counts = Counter(subset_inds).most_common()
+subset_kept_modA_feats = [feat_ID for feat_ID, count in subset_sorted_feat_counts if count == 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(subset_inds):
+    if ind_A in subset_kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+    elif ind_A not in seen:  # only keep one if it's over count X
+        seen.add(ind_A)
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+num_unq_pairs = len(list(set(filt_corr_ind_A)))
+print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+num_unq_pairs
+
+
+# In[59]:
+
+
+# X_subset = weight_matrix_np[mixed_modA_feats]
+# Y_subset = weight_matrix_2[mixed_modB_feats]
+
+# paired_svcca = svcca(X_subset[filt_corr_ind_A], Y_subset[filt_corr_ind_B], "nd")
+# paired_svcca
+
+original_A_indices = [mixed_modA_feats[ind] for ind in filt_corr_ind_A]
+original_B_indices = [mixed_modB_feats[i] for i in filt_corr_ind_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[60]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+# weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# In[87]:
+
+
+paired_rsa = representational_similarity_analysis(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_rsa
+
+
+# In[88]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          representational_similarity_analysis, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_rsa)
+
+
+# ## filter out low corr
+
+# In[61]:
+
+
+rmvLow_corr_inds_A = []
+rmvLow_corr_inds_B = []
+rmvLow_corr_vals = []
+
+for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+    val = subset_vals[ind_B]
+    if val > 0.2:
+        rmvLow_corr_inds_A.append(ind_A)
+        rmvLow_corr_inds_B.append(ind_B)
+        rmvLow_corr_vals.append(val)
+
+
+# In[62]:
+
+
+len(rmvLow_corr_inds_A)
+
+
+# In[63]:
+
+
+original_A_indices = [mixed_modA_feats[ind] for ind in rmvLow_corr_inds_A]
+original_B_indices = [mixed_modB_feats[i] for i in rmvLow_corr_inds_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[64]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# ## filter out low corr: 0.3
+
+# In[65]:
+
+
+rmvLow_corr_inds_A = []
+rmvLow_corr_inds_B = []
+rmvLow_corr_vals = []
+
+for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+    val = subset_vals[ind_B]
+    if val > 0.3:
+        rmvLow_corr_inds_A.append(ind_A)
+        rmvLow_corr_inds_B.append(ind_B)
+        rmvLow_corr_vals.append(val)
+
+
+# In[66]:
+
+
+len(rmvLow_corr_inds_A)
+
+
+# In[67]:
+
+
+original_A_indices = [mixed_modA_feats[ind] for ind in rmvLow_corr_inds_A]
+original_B_indices = [mixed_modB_feats[i] for i in rmvLow_corr_inds_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[68]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# ## filter out low corr: 0.4
+
+# In[69]:
+
+
+rmvLow_corr_inds_A = []
+rmvLow_corr_inds_B = []
+rmvLow_corr_vals = []
+
+for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+    val = subset_vals[ind_B]
+    if val > 0.4:
+        rmvLow_corr_inds_A.append(ind_A)
+        rmvLow_corr_inds_B.append(ind_B)
+        rmvLow_corr_vals.append(val)
+
+
+# In[70]:
+
+
+len(rmvLow_corr_inds_A)
+
+
+# In[71]:
+
+
+original_A_indices = [mixed_modA_feats[ind] for ind in rmvLow_corr_inds_A]
+original_B_indices = [mixed_modB_feats[i] for i in rmvLow_corr_inds_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[72]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# ## interpret
+
+# In[76]:
+
+
+samp_m = 5
+
+
+# In[77]:
+
+
+num_feats = len(rmvLow_corr_inds_A)
+for subset_feature_idx_A, subset_feature_idx_B in zip(rmvLow_corr_inds_A[:num_feats],
+                                                      rmvLow_corr_inds_B[:num_feats]):
+    print(f'Correlation: {subset_vals[subset_feature_idx_B]}')
+    feature_idx_A = mixed_modA_feats[subset_feature_idx_A]
+    feature_idx_B = mixed_modB_feats[subset_feature_idx_B]
+    print('Model A Feature: ', feature_idx_A)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_A, feature_idx_A, samp_m, batch_tokens=inputs["input_ids"])
+    display_top_sequences(ds_top_acts_indices, ds_top_acts_values, batch_tokens=inputs["input_ids"])
+
+    print('Model B Feature: ', feature_idx_B)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_B, feature_idx_B, samp_m, batch_tokens=inputs["input_ids"])
+    display_top_sequences(ds_top_acts_indices, ds_top_acts_values, batch_tokens=inputs["input_ids"])
+
+    print('-'*50)
+
+
+# ## which feats which keywords
+
+# In[78]:
+
+
+top_toks_afterFilt_A = []
+top_toks_afterFilt_B = []
+for feat_ind_A, feat_ind_B in zip(original_A_indices, original_B_indices):
+    top_toks_afterFilt_A.append( fList_model_A_seqs[feat_ind_A] )
+    top_toks_afterFilt_B.append( fList_model_B_seqs[feat_ind_B] )
+
+
+# In[79]:
+
+
+top_tok_list_A = []
+for top_seq_list_feat in top_toks_afterFilt_A:
+    # each feature has top 5 samps in top_seq_list_feat
+    """
+    if a feature contains “king” 3 times, we should only record that it contains “king”.
+    this is bc we’re trying to find feature sim based on which keywords they activate on,
+    but it doesn’t matter how many times that keyword appears in its top 5.
+    """
+    keywords_in_feat = set()
+    for top_seq in top_seq_list_feat:
+        # top_seq is one seq and its top token
+        top_tok = top_seq[1].replace(' ', '').lower()
+        if top_tok in new_keywords and top_tok not in keywords_in_feat:
+            top_tok_list_A.append(top_tok)
+            keywords_in_feat.add(top_tok)
+
+
+# In[80]:
+
+
+len(top_tok_list_A)
+
+
+# In[81]:
+
+
+sorted_kw_counts = Counter(top_tok_list_A).most_common()
+len(sorted_kw_counts) # num unique keywords
+
+
+# In[82]:
+
+
+for rankID in range(len(sorted_kw_counts)):
+    feat_ID = sorted_kw_counts[rankID][0]
+    print("keyword: ", feat_ID, "| Count: ", sorted_kw_counts[rankID][1])
+
+
+# In[83]:
+
+
+top_tok_list_B = []
+for top_seq_list_feat in top_toks_afterFilt_B:
+    # each feature has top 5 samps in top_seq_list_feat
+    """
+    if a feature contains “king” 3 times, we should only record that it contains “king”.
+    this is bc we’re trying to find feature sim based on which keywords they activate on,
+    but it doesn’t matter how many times that keyword appears in its top 5.
+    """
+    keywords_in_feat = set()
+    for top_seq in top_seq_list_feat:
+        # top_seq is one seq and its top token
+        top_tok = top_seq[1].replace(' ', '').lower()
+        if top_tok in new_keywords and top_tok not in keywords_in_feat:
+            top_tok_list_B.append(top_tok)
+            keywords_in_feat.add(top_tok)
+
+
+# In[84]:
+
+
+len(top_tok_list_B)
+
+
+# In[85]:
+
+
+sorted_kw_counts = Counter(top_tok_list_B).most_common()
+len(sorted_kw_counts) # num unique keywords
+
+
+# In[86]:
+
+
+for rankID in range(len(sorted_kw_counts)):
+    feat_ID = sorted_kw_counts[rankID][0]
+    print("keyword: ", feat_ID, "| Count: ", sorted_kw_counts[rankID][1])
+
+
+# # countries
+
+# In[89]:
+
+
+keywords = [
+    "USA", "Canada", "Brazil", "Mexico", "Germany", "France", "Italy", "Spain", "UK", "Australia",
+    "China", "Japan", "India", "Russia", "Korea", "Argentina", "Egypt", "Iran", "Turkey"
+]
+
+
+# In[90]:
+
+
+len(new_keywords)
+
+
+# In[91]:
+
+
+mixed_modA_feats = set()
+mixed_modB_feats = set()
+for kw in new_keywords:
+    modB_feats = find_indices_with_keyword_bySeqs(fList_model_B_seqs, kw)
+    modA_feats = find_indices_with_keyword_bySeqs(fList_model_A_seqs, kw)
+    mixed_modA_feats.update(modA_feats)
+    mixed_modB_feats.update(modB_feats)
+
+mixed_modA_feats = list(mixed_modA_feats)
+mixed_modB_feats = list(mixed_modB_feats)
+
+
+# In[92]:
+
+
+print(len(mixed_modA_feats))
+print(len(mixed_modB_feats))
+
+
+# ## run 1-1
+
+# In[93]:
+
+
+subset_inds, subset_vals = batched_correlation(reshaped_activations_A[:, mixed_modA_feats],
+                                               reshaped_activations_B[:, mixed_modB_feats])
+
+num_unq_pairs = len(list(set(subset_inds)))
+print("% unique: ", num_unq_pairs / len(subset_inds))
+print(num_unq_pairs)
+sum(subset_vals) / len(subset_vals)
+
+
+# In[94]:
+
+
+subset_sorted_feat_counts = Counter(subset_inds).most_common()
+subset_kept_modA_feats = [feat_ID for feat_ID, count in subset_sorted_feat_counts if count == 1]
+
+filt_corr_ind_A = []
+filt_corr_ind_B = []
+seen = set()
+for ind_B, ind_A in enumerate(subset_inds):
+    if ind_A in subset_kept_modA_feats:
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+    elif ind_A not in seen:  # only keep one if it's over count X
+        seen.add(ind_A)
+        filt_corr_ind_A.append(ind_A)
+        filt_corr_ind_B.append(ind_B)
+num_unq_pairs = len(list(set(filt_corr_ind_A)))
+print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
+num_unq_pairs
+
+
+# In[95]:
+
+
+# X_subset = weight_matrix_np[mixed_modA_feats]
+# Y_subset = weight_matrix_2[mixed_modB_feats]
+
+# paired_svcca = svcca(X_subset[filt_corr_ind_A], Y_subset[filt_corr_ind_B], "nd")
+# paired_svcca
+
+original_A_indices = [mixed_modA_feats[ind] for ind in filt_corr_ind_A]
+original_B_indices = [mixed_modB_feats[i] for i in filt_corr_ind_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[96]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+# weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# In[97]:
+
+
+paired_rsa = representational_similarity_analysis(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_rsa
+
+
+# In[98]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          representational_similarity_analysis, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_rsa)
+
+
+# ## filter out low corr
+
+# In[99]:
+
+
+rmvLow_corr_inds_A = []
+rmvLow_corr_inds_B = []
+rmvLow_corr_vals = []
+
+for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+    val = subset_vals[ind_B]
+    if val > 0.2:
+        rmvLow_corr_inds_A.append(ind_A)
+        rmvLow_corr_inds_B.append(ind_B)
+        rmvLow_corr_vals.append(val)
+
+
+# In[100]:
+
+
+len(rmvLow_corr_inds_A)
+
+
+# In[101]:
+
+
+original_A_indices = [mixed_modA_feats[ind] for ind in rmvLow_corr_inds_A]
+original_B_indices = [mixed_modB_feats[i] for i in rmvLow_corr_inds_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[102]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# ## filter out low corr: 0.3
+
+# In[103]:
+
+
+rmvLow_corr_inds_A = []
+rmvLow_corr_inds_B = []
+rmvLow_corr_vals = []
+
+for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+    val = subset_vals[ind_B]
+    if val > 0.3:
+        rmvLow_corr_inds_A.append(ind_A)
+        rmvLow_corr_inds_B.append(ind_B)
+        rmvLow_corr_vals.append(val)
+
+
+# In[104]:
+
+
+len(rmvLow_corr_inds_A)
+
+
+# In[105]:
+
+
+original_A_indices = [mixed_modA_feats[ind] for ind in rmvLow_corr_inds_A]
+original_B_indices = [mixed_modB_feats[i] for i in rmvLow_corr_inds_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[106]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# ## filter out low corr: 0.4
+
+# In[107]:
+
+
+rmvLow_corr_inds_A = []
+rmvLow_corr_inds_B = []
+rmvLow_corr_vals = []
+
+for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+    val = subset_vals[ind_B]
+    if val > 0.4:
+        rmvLow_corr_inds_A.append(ind_A)
+        rmvLow_corr_inds_B.append(ind_B)
+        rmvLow_corr_vals.append(val)
+
+
+# In[108]:
+
+
+len(rmvLow_corr_inds_A)
+
+
+# In[109]:
+
+
+original_A_indices = [mixed_modA_feats[ind] for ind in rmvLow_corr_inds_A]
+original_B_indices = [mixed_modB_feats[i] for i in rmvLow_corr_inds_B]
+
+paired_svcca = svcca(weight_matrix_np[original_A_indices], weight_matrix_2[original_B_indices], "nd")
+paired_svcca
+
+
+# In[110]:
+
+
+X_subset = weight_matrix_np[original_A_indices]
+Y_subset = weight_matrix_2[original_B_indices]
+
+all_rand_scores = shuffle_rand(1000, X_subset, Y_subset, Y_subset.shape[0],
+                                          svcca, shapereq_bool=True)
+print( sum(all_rand_scores) / len(all_rand_scores) )
+np.mean(np.array(all_rand_scores) >= paired_svcca)
+
+
+# ## interpret
+
+# In[111]:
+
+
+samp_m = 5
+
+
+# In[112]:
+
+
+num_feats = len(rmvLow_corr_inds_A)
+for subset_feature_idx_A, subset_feature_idx_B in zip(rmvLow_corr_inds_A[:num_feats],
+                                                      rmvLow_corr_inds_B[:num_feats]):
+    print(f'Correlation: {subset_vals[subset_feature_idx_B]}')
+    feature_idx_A = mixed_modA_feats[subset_feature_idx_A]
+    feature_idx_B = mixed_modB_feats[subset_feature_idx_B]
+    print('Model A Feature: ', feature_idx_A)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_A, feature_idx_A, samp_m, batch_tokens=inputs["input_ids"])
+    display_top_sequences(ds_top_acts_indices, ds_top_acts_values, batch_tokens=inputs["input_ids"])
+
+    print('Model B Feature: ', feature_idx_B)
+    ds_top_acts_indices, ds_top_acts_values = highest_activating_tokens(feature_acts_B, feature_idx_B, samp_m, batch_tokens=inputs["input_ids"])
+    display_top_sequences(ds_top_acts_indices, ds_top_acts_values, batch_tokens=inputs["input_ids"])
+
+    print('-'*50)
+
+
+# ## which feats which keywords
+
+# In[113]:
+
+
+top_toks_afterFilt_A = []
+top_toks_afterFilt_B = []
+for feat_ind_A, feat_ind_B in zip(original_A_indices, original_B_indices):
+    top_toks_afterFilt_A.append( fList_model_A_seqs[feat_ind_A] )
+    top_toks_afterFilt_B.append( fList_model_B_seqs[feat_ind_B] )
+
+
+# In[114]:
+
+
+top_tok_list_A = []
+for top_seq_list_feat in top_toks_afterFilt_A:
+    # each feature has top 5 samps in top_seq_list_feat
+    """
+    if a feature contains “king” 3 times, we should only record that it contains “king”.
+    this is bc we’re trying to find feature sim based on which keywords they activate on,
+    but it doesn’t matter how many times that keyword appears in its top 5.
+    """
+    keywords_in_feat = set()
+    for top_seq in top_seq_list_feat:
+        # top_seq is one seq and its top token
+        top_tok = top_seq[1].replace(' ', '').lower()
+        if top_tok in new_keywords and top_tok not in keywords_in_feat:
+            top_tok_list_A.append(top_tok)
+            keywords_in_feat.add(top_tok)
+
+
+# In[115]:
+
+
+len(top_tok_list_A)
+
+
+# In[116]:
+
+
+sorted_kw_counts = Counter(top_tok_list_A).most_common()
+len(sorted_kw_counts) # num unique keywords
+
+
+# In[117]:
+
+
+for rankID in range(len(sorted_kw_counts)):
+    feat_ID = sorted_kw_counts[rankID][0]
+    print("keyword: ", feat_ID, "| Count: ", sorted_kw_counts[rankID][1])
+
+
+# In[118]:
+
+
+top_tok_list_B = []
+for top_seq_list_feat in top_toks_afterFilt_B:
+    # each feature has top 5 samps in top_seq_list_feat
+    """
+    if a feature contains “king” 3 times, we should only record that it contains “king”.
+    this is bc we’re trying to find feature sim based on which keywords they activate on,
+    but it doesn’t matter how many times that keyword appears in its top 5.
+    """
+    keywords_in_feat = set()
+    for top_seq in top_seq_list_feat:
+        # top_seq is one seq and its top token
+        top_tok = top_seq[1].replace(' ', '').lower()
+        if top_tok in new_keywords and top_tok not in keywords_in_feat:
+            top_tok_list_B.append(top_tok)
+            keywords_in_feat.add(top_tok)
+
+
+# In[119]:
+
+
+len(top_tok_list_B)
+
+
+# In[120]:
+
+
+sorted_kw_counts = Counter(top_tok_list_B).most_common()
+len(sorted_kw_counts) # num unique keywords
+
+
+# In[121]:
 
 
 for rankID in range(len(sorted_kw_counts)):
