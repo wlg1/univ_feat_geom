@@ -3,73 +3,39 @@
 
 # # setup
 
-# In[ ]:
-
-
-get_ipython().run_cell_magic('capture', '', '%pip install sae-lens\n# !pip install transformer_lens\n# !pip install datasets\n')
-
-
-# In[ ]:
-
-
-from sae_lens import SAE
-
-
-# In[ ]:
-
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-import torch
-from torch import nn, Tensor
-# from transformer_lens.hook_points import HookPoint
-
-# load this after transformerlens else issue
-# from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
-
-from functools import partial
-from jaxtyping import Float, Int
-from typing import Optional, Callable, Union, List, Tuple
-
-
-# In[ ]:
-
-
-# req to load model into transformerlens
-from huggingface_hub import hf_hub_download, notebook_login
-notebook_login()
-
-
-# In[ ]:
+# In[1]:
 
 
 import logging
 logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
 
 
-# In[ ]:
+# In[2]:
 
 
 # from google.colab import drive
-# import shutil
 # drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[3]:
 
 
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
+get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
 
 
-# In[ ]:
+# In[4]:
 
 
-# from transformer_lens.hook_points import HookPoint
+# you should load this before cloning repo files
+# from .config import SaeConfig
+# from .utils import decoder_impl
+
+from sae.config import SaeConfig
+from sae.utils import decoder_impl
+from sae import Sae
 
 
-# In[ ]:
+# In[5]:
 
 
 import gc
@@ -93,7 +59,7 @@ from safetensors.torch import load_model, save_model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# In[ ]:
+# In[6]:
 
 
 from collections import Counter
@@ -101,7 +67,7 @@ from collections import Counter
 
 # ## corr fns
 
-# In[ ]:
+# In[7]:
 
 
 def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of rows per chunk
@@ -129,7 +95,7 @@ def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of r
     return torch.tensor(normalized_A)
 
 
-# In[ ]:
+# In[8]:
 
 
 def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
@@ -169,7 +135,7 @@ def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_si
 
 # ## sim fns
 
-# In[ ]:
+# In[9]:
 
 
 import functools
@@ -275,7 +241,7 @@ class Pipeline:
         )
 
 
-# In[ ]:
+# In[10]:
 
 
 from typing import List, Set, Union
@@ -332,7 +298,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[ ]:
+# In[11]:
 
 
 import functools
@@ -659,7 +625,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[ ]:
+# In[12]:
 
 
 import scipy.optimize
@@ -681,7 +647,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[ ]:
+# In[13]:
 
 
 from typing import Optional
@@ -772,7 +738,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[ ]:
+# In[14]:
 
 
 ##################################################################################
@@ -1363,7 +1329,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[ ]:
+# In[15]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1386,7 +1352,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[ ]:
+# In[16]:
 
 
 import random
@@ -1406,18 +1372,17 @@ def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn,
 
 # ## plot fns
 
-# In[ ]:
+# In[17]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
-    model_B_layers = [2, 6, 10, 14, 18, 22]
     for key, sub_dict in layer_to_dictscores.items():
         for sub_key, value in sub_dict.items():
             sub_dict[sub_key] = round(value, 4)
 
-    layers = [f'L{i}' for i in model_B_layers]
-    paired_values = [layer_to_dictscores[i]['svcca_paired'] for i in model_B_layers]
-    unpaired_values = [layer_to_dictscores[i]['svcca_rand_mean'] for i in model_B_layers]
+    layers = [f'L{i}' for i in range(0, 12)]
+    paired_values = [layer_to_dictscores[i]['svcca_paired'] for i in range(0, 12)]
+    unpaired_values = [layer_to_dictscores[i]['svcca_rand_mean'] for i in range(0, 12)]
 
     # Plotting configuration
     x = np.arange(len(layers))  # label locations
@@ -1430,7 +1395,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
 
     # Adding labels, title and custom x-axis tick labels
     ax.set_ylabel('SVCCA')
-    # ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
+    ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
     ax.set_xticks(x)
     ax.set_xticklabels(layers)
     ax.set_ylim(0, 1)  # Ensuring y-axis is scaled from 0 to 1
@@ -1458,18 +1423,17 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[18]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
-    model_B_layers = [2, 6, 10, 14, 18, 22]
     for key, sub_dict in layer_to_dictscores.items():
         for sub_key, value in sub_dict.items():
             sub_dict[sub_key] = round(value, 4)
 
-    layers = [f'L{i}' for i in model_B_layers]
-    paired_values = [layer_to_dictscores[i]['rsa_paired'] for i in model_B_layers]
-    unpaired_values = [layer_to_dictscores[i]['rsa_rand_mean'] for i in model_B_layers]
+    layers = [f'L{i}' for i in range(0, 12)]
+    paired_values = [layer_to_dictscores[i]['rsa_paired'] for i in range(0, 12)]
+    unpaired_values = [layer_to_dictscores[i]['rsa_rand_mean'] for i in range(0, 12)]
 
     # Plotting configuration
     x = np.arange(len(layers))  # label locations
@@ -1482,7 +1446,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
 
     # Adding labels, title and custom x-axis tick labels
     ax.set_ylabel('RSA')
-    # ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
+    ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
     ax.set_xticks(x)
     ax.set_xticklabels(layers)
     ax.set_ylim(0, 1)  # Ensuring y-axis is scaled from 0 to 1
@@ -1510,17 +1474,16 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[19]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
-    model_B_layers = [2, 6, 10, 14, 18, 22]
     for key, sub_dict in layer_to_dictscores.items():
         for sub_key, value in sub_dict.items():
             sub_dict[sub_key] = round(value, 4)
 
-    layers = [f'L{i}' for i in model_B_layers]
-    paired_values = [layer_to_dictscores[i]['mean_actv_corr'] for i in model_B_layers]
+    layers = [f'L{i}' for i in range(0, 12)]
+    paired_values = [layer_to_dictscores[i]['mean_actv_corr'] for i in range(0, 12)]
     # unpaired_values = [layer_to_dictscores[i]['svcca_unpaired'] for i in range(0, 12)]
 
     # Plotting configuration
@@ -1534,7 +1497,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
 
     # Adding labels, title and custom x-axis tick labels
     ax.set_ylabel('Corr')
-    # ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
+    ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
     ax.set_xticks(x)
     ax.set_xticklabels(layers)
     ax.set_ylim(0, 1)  # Ensuring y-axis is scaled from 0 to 1
@@ -1562,17 +1525,16 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[20]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
-    model_B_layers = [2, 6, 10, 14, 18, 22]
     for key, sub_dict in layer_to_dictscores.items():
         for sub_key, value in sub_dict.items():
             sub_dict[sub_key] = round(value, 4)
 
-    layers = [f'L{i}' for i in model_B_layers]
-    paired_values = [layer_to_dictscores[i]['mean_actv_corr_filt'] for i in model_B_layers]
+    layers = [f'L{i}' for i in range(0, 12)]
+    paired_values = [layer_to_dictscores[i]['mean_actv_corr_filt'] for i in range(0, 12)]
 
     x = np.arange(len(layers))  # label locations
     width = 0.35  # width of the bars
@@ -1581,7 +1543,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     rects1 = ax.bar(x - width/2, paired_values, width, label='Paired')
 
     ax.set_ylabel('Corr')
-    # ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
+    ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
     ax.set_xticks(x)
     ax.set_xticklabels(layers)
     ax.set_ylim(0, 1)  # Ensuring y-axis is scaled from 0 to 1
@@ -1600,11 +1562,10 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[21]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
-    model_B_layers = [2, 6, 10, 14, 18, 22]
     for key, sub_dict in layer_to_dictscores.items():
         for sub_key, value in sub_dict.items():
             sub_dict[sub_key] = round(value, 4)
@@ -1619,7 +1580,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     rects1 = ax.bar(x - width/2, paired_values, width, label='Paired')
 
     ax.set_ylabel('Num Feats Kept')
-    # ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
+    ax.set_title(f'SAEs comparison by Pythia 70m MLP{layer_id} vs 160m MLP Layers')
     ax.set_xticks(x)
     ax.set_xticklabels(layers)
     ax.set_ylim(0, 1)  # Ensuring y-axis is scaled from 0 to 1
@@ -1638,7 +1599,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[22]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1690,7 +1651,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[ ]:
+# In[23]:
 
 
 def highest_activating_tokens(
@@ -1718,7 +1679,7 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
 
 
-# In[ ]:
+# In[24]:
 
 
 from rich import print as rprint
@@ -1744,7 +1705,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
     rprint(s)
 
 
-# In[ ]:
+# In[25]:
 
 
 def store_top_toks(top_acts_indices, top_acts_values, batch_tokens):
@@ -1757,13 +1718,12 @@ def store_top_toks(top_acts_indices, top_acts_values, batch_tokens):
 
 # ## get llm actv fns
 
-# In[ ]:
+# In[26]:
 
 
 from torch.utils.data import DataLoader, TensorDataset
 
-def get_llm_actvs_batch(model, inputs, layerID):
-# def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
+def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
 # def get_llm_actvs_batch(model, inputs, batch_size=100, maxseqlen=300):
     # outputs_by_layer = {None for layerID in len(model.gpt_neox.layers)}
     accumulated_outputs = None
@@ -1778,11 +1738,11 @@ def get_llm_actvs_batch(model, inputs, layerID):
         with torch.no_grad():  # Disable gradient calculation for memory efficiency
             outputs = model(**batch_inputs, output_hidden_states=True)
             if accumulated_outputs is None:
-                accumulated_outputs = outputs.hidden_states[layerID]
+                accumulated_outputs = outputs.hidden_states[layer_id]
                 # for layer_id in len(model.gpt_neox.layers):
                     # outputs_by_layer[layer_id] = outputs.hidden_states[layer_id]
             else:
-                accumulated_outputs = torch.cat((accumulated_outputs, outputs.hidden_states[layerID]), dim= 0)
+                accumulated_outputs = torch.cat((accumulated_outputs, outputs.hidden_states[layer_id]), dim= 0)
 
         del batch_inputs, outputs
         torch.cuda.empty_cache()
@@ -1793,33 +1753,29 @@ def get_llm_actvs_batch(model, inputs, layerID):
 
 # ## get sae actv fns
 
-# In[ ]:
+# In[27]:
 
 
 def get_weights_and_acts(name, layer_id, outputs):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    hookpoint = "layers." + str(layer_id)
 
-    sae, cfg_dict, sparsity = SAE.from_pretrained(
-        release = "gemma-2b-res-jb",
-        sae_id = f"blocks.{layer_id}.hook_resid_post",
-    )
-    sae = sae.to('cuda')
-    sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+    sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
 
-    weight_matrix = sae.W_dec.cpu().detach().numpy()
+    weight_matrix_np = sae.W_dec.cpu().detach().numpy()
 
     with torch.inference_mode():
-        reshaped_activations = sae.encode(outputs)
-        # reshaped_activations = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+        # reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+        orig = sae.pre_acts(outputs.to("cuda"))
 
-    first_dim_reshaped = reshaped_activations.shape[0] * reshaped_activations.shape[1]
-    reshaped_activations = reshaped_activations.reshape(first_dim_reshaped, reshaped_activations.shape[-1]).cpu()
+    first_dim_reshaped = orig.shape[0] * orig.shape[1]
+    reshaped_activations_A = orig.reshape(first_dim_reshaped, orig.shape[-1]).cpu()
 
-    # return weight_matrix_np, reshaped_activations_A, orig
-    return weight_matrix, reshaped_activations
+    return weight_matrix_np, reshaped_activations_A, orig
+    # return weight_matrix_np, reshaped_activations_A
 
 
-# In[ ]:
+# In[28]:
 
 
 def get_weights_and_acts_byLayer(name, layer_id, outputs):
@@ -1831,16 +1787,16 @@ def get_weights_and_acts_byLayer(name, layer_id, outputs):
     weight_matrix_np = sae.W_dec.cpu().detach().numpy()
 
     with torch.inference_mode():
-        # reshaped_activations_A = sae.pre_acts(outputs.to("cuda"))
-        reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+        orig = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
 
-    first_dim_reshaped = reshaped_activations_A.shape[0] * reshaped_activations_A.shape[1]
-    reshaped_activations_A = reshaped_activations_A.reshape(first_dim_reshaped, reshaped_activations_A.shape[-1]).cpu()
+    first_dim_reshaped = orig.shape[0] * orig.shape[1]
+    reshaped_activations_A = orig.reshape(first_dim_reshaped, orig.shape[-1]).cpu()
 
-    return weight_matrix_np, reshaped_activations_A
+    return weight_matrix_np, reshaped_activations_A, orig
+    # return weight_matrix_np, reshaped_activations_A
 
 
-# In[ ]:
+# In[29]:
 
 
 def count_zero_columns(tensor):
@@ -1853,144 +1809,21 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[ ]:
+# In[30]:
 
 
-
-
-
-# # load data
-
-# In[ ]:
-
-
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
-tokenizer.pad_token = tokenizer.eos_token
-
-
-# In[ ]:
-
-
-from datasets import load_dataset
-dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
-
-
-# In[ ]:
-
-
-batch_size = 150
-maxseqlen = 150
-
-def get_next_batch(dataset_iter, batch_size=100):
-    batch = []
-    for _ in range(batch_size):
-        try:
-            sample = next(dataset_iter)
-            batch.append(sample['text'])
-        except StopIteration:
-            break
-    return batch
-
-dataset_iter = iter(dataset)
-batch = get_next_batch(dataset_iter, batch_size)
-
-# Tokenize the batch
-inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=maxseqlen)
-
-
-# # load models
-
-# In[ ]:
-
-
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b")
-model_2 = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
-
-
-# In[ ]:
-
-
-inputs = {k: v.to('cuda') for k, v in inputs.items()}
-
-
-# In[ ]:
-
-
-model = model.to('cuda')
-# with torch.inference_mode():
-#     outputs = model(**inputs, output_hidden_states=True)
-
-
-# In[ ]:
-
-
-model_2 = model_2.to('cuda')
-# with torch.inference_mode():
-#     outputs_2 = model_2(**inputs, output_hidden_states=True)
-
-
-# In[ ]:
-
-
-# del model
-# torch.cuda.empty_cache()
-
-
-# # run expm fn
-
-# In[ ]:
-
-
-# , outputs, outputs_2, layer_start, layer_end)
-def run_expm(layer_id, inputs):
-    # model_B_layers = [0, 2, 6, 10, 14, 18, 22, 25]
-    model_B_layers = [2, 6, 10, 14, 18, 22]
-    junk_words = ['.', '\\n', '\n', '', ' ', '-' , '<bos>', ',', '!', '?',
-                  '<|endoftext|>', '|bos|']
+def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
+    junk_words = ['.', '\\n', '\n', '', ' ', '-' , '<bos>', ',', '!', '?', '<|endoftext|>', '|bos|']
     layer_to_dictscores = {}
 
-    with torch.inference_mode():
-        outputs = get_llm_actvs_batch(model, inputs, layer_id)
+    name = "EleutherAI/sae-pythia-70m-32k"
+    weight_matrix_np, reshaped_activations_A, feature_acts_model_A = get_weights_and_acts(name, layer_id, outputs)
 
-    # weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, layer_id, outputs)
-    sae, cfg_dict, sparsity = SAE.from_pretrained(
-        release = "gemma-2b-res-jb",
-        sae_id = f"blocks.{layer_id}.hook_resid_post",
-    )
-    weight_matrix_np = sae.W_dec.cpu().detach().numpy()
-
-    sae = sae.to('cuda')
-    sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
-    with torch.no_grad():
-        # reshaped_activations_A = sae.encode(outputs.hidden_states[layerID])
-        feature_acts_model_A = sae.encode(outputs)
-    first_dim_reshaped = feature_acts_model_A.shape[0] * feature_acts_model_A.shape[1]
-    reshaped_activations_A = feature_acts_model_A.reshape(first_dim_reshaped, feature_acts_model_A.shape[-1]).cpu()
-
-    # for layerID_2 in range(layer_start, layer_end): # 0, 12
-    for layerID_2 in model_B_layers: # 0, 12
-        print("Layer: " + str(layerID_2))
+    name = "EleutherAI/sae-pythia-160m-32k"
+    for layerID_2 in range(layer_start, layer_end): # 0, 12
         dictscores = {}
 
-        with torch.inference_mode():
-            outputs_2 = get_llm_actvs_batch(model_2, inputs, layerID_2)
-
-        # weight_matrix_2, reshaped_activations_B = get_weights_and_acts_byLayer(name, layerID_2, outputs_2)
-        sae_2, cfg_dict, sparsity = SAE.from_pretrained(
-            release = "gemma-scope-2b-pt-res-canonical",
-            sae_id = f"layer_{layerID_2}/width_16k/canonical",
-        )
-        weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
-
-        sae_2 = sae_2.to('cuda')
-        sae_2.eval()  # prevents error if we're expecting a dead neuron mask for who grads
-        with torch.no_grad():
-            # reshaped_activations_B = sae_2.encode(outputs_2.hidden_states[layer_id_2])
-            feature_acts_model_B = sae_2.encode(outputs_2)
-        first_dim_reshaped = feature_acts_model_B.shape[0] * feature_acts_model_B.shape[1]
-        reshaped_activations_B = feature_acts_model_B.reshape(first_dim_reshaped, feature_acts_model_B.shape[-1]).cpu()
+        weight_matrix_2, reshaped_activations_B, feature_acts_model_B = get_weights_and_acts_byLayer(name, layerID_2, outputs_2)
 
         """
         `batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
@@ -2010,6 +1843,7 @@ def run_expm(layer_id, inputs):
 
         filt_corr_ind_A = []
         filt_corr_ind_B = []
+        seen = set()
         for feat_B, feat_A in enumerate(highest_correlations_indices_AB):
             # if feat_B % 2000 == 0:
             #     print(feat_B)
@@ -2032,11 +1866,29 @@ def run_expm(layer_id, inputs):
         print("% unique: ", num_unq_pairs / reshaped_activations_B.shape[-1])
         print("num feats after filt: ", len(filt_corr_ind_A))
 
+        sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
+        kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+
+        oneToOne_A = []
+        oneToOne_B = []
+        seen = set()
+        for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+            if ind_A in kept_modA_feats:
+                oneToOne_A.append(ind_A)
+                oneToOne_B.append(ind_B)
+            elif ind_A not in seen:  # only keep one if it's over count X
+                seen.add(ind_A)
+                oneToOne_A.append(ind_A)
+                oneToOne_B.append(ind_B)
+        num_unq_pairs = len(list(set(oneToOne_A)))
+        print("% unique: ", num_unq_pairs / len(oneToOne_A))
+        print("num feats after 1-1: ", len(oneToOne_A))
+
         new_highest_correlations_indices_A = []
         new_highest_correlations_indices_B = []
         new_highest_correlations_values = []
 
-        for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+        for ind_A, ind_B in zip(oneToOne_A, oneToOne_B):
             val = highest_correlations_values_AB[ind_B]
             if val > 0.1:
                 new_highest_correlations_indices_A.append(ind_A)
@@ -2048,6 +1900,7 @@ def run_expm(layer_id, inputs):
         print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
         dictscores["num_feat_kept"] = len(new_highest_correlations_indices_A)
         dictscores["num_feat_A_unique"] = len(list(set(new_highest_correlations_indices_A)))
+        # dictscores["num_feat_B_unique"] = len(list(set(new_highest_correlations_indices_B)))
 
         dictscores["mean_actv_corr_filt"] = sum(new_highest_correlations_values) / len(new_highest_correlations_values)
 
@@ -2055,10 +1908,10 @@ def run_expm(layer_id, inputs):
         # sim tests
 
         num_feats = len(new_highest_correlations_indices_A)
-        num_runs = 10
+        num_runs = 1
 
         dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-
+        print('svcca paired done')
         rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
                                     weight_matrix_2[new_highest_correlations_indices_B], num_feats,
                                     svcca, shapereq_bool=True)
@@ -2066,6 +1919,7 @@ def run_expm(layer_id, inputs):
         dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
 
         dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+        print('rsa paired done')
         rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
                                                     weight_matrix_2[new_highest_correlations_indices_B], num_feats,
                                                     representational_similarity_analysis, shapereq_bool=True)
@@ -2081,13 +1935,87 @@ def run_expm(layer_id, inputs):
     return layer_to_dictscores
 
 
-# # loop L0 vs others (intv 4)
+# # load data
+
+# In[31]:
+
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
+tokenizer.pad_token = tokenizer.eos_token
+
+
+# In[32]:
+
+
+from datasets import load_dataset
+# dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
+dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
+
+
+# In[33]:
+
+
+batch_size = 100
+maxseqlen = 300
+
+def get_next_batch(dataset_iter, batch_size=100):
+    batch = []
+    for _ in range(batch_size):
+        try:
+            sample = next(dataset_iter)
+            batch.append(sample['text'])
+        except StopIteration:
+            break
+    return batch
+
+dataset_iter = iter(dataset)
+batch = get_next_batch(dataset_iter, batch_size)
+
+# Tokenize the batch
+inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=maxseqlen)
+
+
+# # load models
+
+# In[34]:
+
+
+model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m")
+model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-160m")
+
+
+# ## get LLM actvs
+
+# In[35]:
+
+
+with torch.inference_mode():
+    # outputs = model(**inputs, output_hidden_states=True)
+    outputs_2 = model_2(**inputs, output_hidden_states=True)
+
+    # outputs = get_llm_actvs_batch(model, inputs, batch_size=100, maxseqlen=300)
+    # outputs_2 = get_llm_actvs_batch(model_2, inputs, batch_size=100, maxseqlen=300)
+
+
+# # Model A, L0
 
 # In[ ]:
 
 
 layer_id = 0
-layer_to_dictscores = run_expm(layer_id, inputs)
+
+with torch.inference_mode():
+    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[ ]:
+
+
+layer_start = 0
+layer_end = len(model_2.gpt_neox.layers)
+layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
 
 
 # In[ ]:
@@ -2099,9 +2027,9 @@ layer_to_dictscores
 # In[ ]:
 
 
-with open(f'gemma1_L{layer_id}_gemma2_multL.pkl', 'wb') as f:
+with open(f'pythia70m_L{layer_id}_pythia160m_multL.pkl', 'wb') as f:
     pickle.dump(layer_to_dictscores, f)
-files.download(f'gemma1_L{layer_id}_gemma2_multL.pkl')
+files.download(f'pythia70m_L{layer_id}_pythia160m_multL.pkl')
 
 
 # ### plot
@@ -2134,266 +2062,383 @@ plot_meanCorr_byLayer(layer_to_dictscores)
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
 # In[ ]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
-# # loop L6 vs others (intv 4)
+# # Model A, L1
 
-# In[ ]:
-
-
-layer_id = 6
-layer_to_dictscores = run_expm(layer_id, inputs)
+# In[58]:
 
 
-# In[ ]:
+layer_id = 1
+
+with torch.inference_mode():
+    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[59]:
+
+
+layer_start = 0
+layer_end = len(model_2.gpt_neox.layers)
+layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
+
+
+# In[60]:
 
 
 layer_to_dictscores
 
 
-# In[ ]:
+# In[61]:
 
 
-with open(f'gemma1_L{layer_id}_gemma2_multL.pkl', 'wb') as f:
+with open(f'pythia70m_L{layer_id}_pythia160m_multL.pkl', 'wb') as f:
     pickle.dump(layer_to_dictscores, f)
-files.download(f'gemma1_L{layer_id}_gemma2_multL.pkl')
+files.download(f'pythia70m_L{layer_id}_pythia160m_multL.pkl')
 
 
 # ### plot
 
-# In[ ]:
+# In[62]:
 
 
 plot_svcca_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[63]:
 
 
 plot_rsa_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[64]:
 
 
 plot_meanCorr_filt_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[65]:
 
 
 plot_meanCorr_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[66]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
-# In[ ]:
+# In[67]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
-# # loop L10 vs others (intv 4)
+# # Model A, L2
 
-# In[ ]:
-
-
-# layer_start = 0
-# layer_end = len(model_2.gpt_neox.layers)
-layer_id = 10
-layer_to_dictscores = run_expm(layer_id, inputs)
+# In[36]:
 
 
-# In[ ]:
+layer_id = 2
+
+with torch.inference_mode():
+    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[37]:
+
+
+layer_start = 0
+layer_end = len(model_2.gpt_neox.layers)
+layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
+
+
+# In[38]:
 
 
 layer_to_dictscores
 
 
-# In[ ]:
+# In[39]:
 
 
-with open(f'gemma1_L{layer_id}_gemma2_multL.pkl', 'wb') as f:
+layer_id = 2
+
+
+# In[40]:
+
+
+with open(f'pythia70m_L{layer_id}_pythia160m_multL.pkl', 'wb') as f:
     pickle.dump(layer_to_dictscores, f)
-files.download(f'gemma1_L{layer_id}_gemma2_multL.pkl')
+files.download(f'pythia70m_L{layer_id}_pythia160m_multL.pkl')
 
 
 # ### plot
 
-# In[ ]:
+# In[41]:
 
 
 plot_svcca_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[42]:
 
 
 plot_rsa_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[43]:
 
 
 plot_meanCorr_filt_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[44]:
 
 
 plot_meanCorr_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[45]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
-# In[ ]:
+# In[46]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
-# # loop L12 vs others (intv 4)
+# # Model A, L3
 
-# In[ ]:
-
-
-layer_id = 12
-layer_to_dictscores = run_expm(layer_id, inputs)
+# In[47]:
 
 
-# In[ ]:
+layer_id = 3
+
+with torch.inference_mode():
+    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[48]:
+
+
+layer_start = 0
+layer_end = len(model_2.gpt_neox.layers)
+layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
+
+
+# In[49]:
 
 
 layer_to_dictscores
 
 
-# In[ ]:
+# In[50]:
 
 
-with open(f'gemma1_L{layer_id}_gemma2_multL.pkl', 'wb') as f:
+with open(f'pythia70m_L{layer_id}_pythia160m_multL.pkl', 'wb') as f:
     pickle.dump(layer_to_dictscores, f)
-files.download(f'gemma1_L{layer_id}_gemma2_multL.pkl')
+files.download(f'pythia70m_L{layer_id}_pythia160m_multL.pkl')
 
 
 # ### plot
 
-# In[ ]:
+# In[51]:
 
 
 plot_svcca_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[52]:
 
 
 plot_rsa_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[53]:
 
 
 plot_meanCorr_filt_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[54]:
 
 
 plot_meanCorr_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[55]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
-# In[ ]:
+# In[56]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
-# # loop L17 vs others (intv 4)
+# # Model A, L4
 
-# In[ ]:
-
-
-layer_id = 17
-layer_to_dictscores = run_expm(layer_id, inputs)
+# In[68]:
 
 
-# In[ ]:
+layer_id = 4
+
+with torch.inference_mode():
+    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[69]:
+
+
+layer_start = 0
+layer_end = len(model_2.gpt_neox.layers)
+layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
+
+
+# In[70]:
 
 
 layer_to_dictscores
 
 
-# In[ ]:
+# In[71]:
 
 
-with open(f'gemma1_L{layer_id}_gemma2_multL.pkl', 'wb') as f:
+with open(f'pythia70m_L{layer_id}_pythia160m_multL.pkl', 'wb') as f:
     pickle.dump(layer_to_dictscores, f)
-files.download(f'gemma1_L{layer_id}_gemma2_multL.pkl')
+files.download(f'pythia70m_L{layer_id}_pythia160m_multL.pkl')
 
 
 # ### plot
 
-# In[ ]:
+# In[72]:
 
 
 plot_svcca_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[73]:
 
 
 plot_rsa_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[74]:
 
 
 plot_meanCorr_filt_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[75]:
 
 
 plot_meanCorr_byLayer(layer_to_dictscores)
 
 
-# In[ ]:
+# In[76]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
-# In[ ]:
+# In[77]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
+
+
+# # Model A, L5
+
+# In[78]:
+
+
+layer_id = 5
+
+with torch.inference_mode():
+    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
+
+
+# In[79]:
+
+
+layer_start = 0
+layer_end = len(model_2.gpt_neox.layers)
+layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
+
+
+# In[80]:
+
+
+layer_to_dictscores
+
+
+# In[81]:
+
+
+with open(f'pythia70m_L{layer_id}_pythia160m_multL.pkl', 'wb') as f:
+    pickle.dump(layer_to_dictscores, f)
+files.download(f'pythia70m_L{layer_id}_pythia160m_multL.pkl')
+
+
+# ### plot
+
+# In[82]:
+
+
+plot_svcca_byLayer(layer_to_dictscores)
+
+
+# In[83]:
+
+
+plot_rsa_byLayer(layer_to_dictscores)
+
+
+# In[84]:
+
+
+plot_meanCorr_filt_byLayer(layer_to_dictscores)
+
+
+# In[85]:
+
+
+plot_meanCorr_byLayer(layer_to_dictscores)
+
+
+# In[86]:
+
+
+for key, val in layer_to_dictscores.items():
+    print(key, val['num_feat_kept'])
+
+
+# In[87]:
+
+
+for key, val in layer_to_dictscores.items():
+    print(key, val['num_feat_A_unique'])
 

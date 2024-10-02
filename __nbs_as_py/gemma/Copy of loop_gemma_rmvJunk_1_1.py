@@ -3,19 +3,27 @@
 
 # # setup
 
-# In[ ]:
+# In[1]:
+
+
+# req to load model into transformerlens
+from huggingface_hub import hf_hub_download, notebook_login
+notebook_login()
+
+
+# In[2]:
 
 
 get_ipython().run_cell_magic('capture', '', '%pip install sae-lens\n# !pip install transformer_lens\n# !pip install datasets\n')
 
 
-# In[ ]:
+# In[3]:
 
 
 from sae_lens import SAE
 
 
-# In[ ]:
+# In[4]:
 
 
 import numpy as np
@@ -34,22 +42,14 @@ from jaxtyping import Float, Int
 from typing import Optional, Callable, Union, List, Tuple
 
 
-# In[ ]:
-
-
-# req to load model into transformerlens
-from huggingface_hub import hf_hub_download, notebook_login
-notebook_login()
-
-
-# In[ ]:
+# In[5]:
 
 
 import logging
 logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
 
 
-# In[ ]:
+# In[6]:
 
 
 # from google.colab import drive
@@ -57,19 +57,19 @@ logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading m
 # drive.mount('/content/drive')
 
 
-# In[ ]:
+# In[7]:
 
 
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 
 
-# In[ ]:
+# In[8]:
 
 
 # from transformer_lens.hook_points import HookPoint
 
 
-# In[ ]:
+# In[9]:
 
 
 import gc
@@ -93,7 +93,7 @@ from safetensors.torch import load_model, save_model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# In[ ]:
+# In[10]:
 
 
 from collections import Counter
@@ -101,7 +101,7 @@ from collections import Counter
 
 # ## corr fns
 
-# In[ ]:
+# In[11]:
 
 
 def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of rows per chunk
@@ -129,7 +129,7 @@ def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of r
     return torch.tensor(normalized_A)
 
 
-# In[ ]:
+# In[12]:
 
 
 def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
@@ -169,7 +169,7 @@ def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_si
 
 # ## sim fns
 
-# In[ ]:
+# In[13]:
 
 
 import functools
@@ -275,7 +275,7 @@ class Pipeline:
         )
 
 
-# In[ ]:
+# In[14]:
 
 
 from typing import List, Set, Union
@@ -332,7 +332,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[ ]:
+# In[15]:
 
 
 import functools
@@ -659,7 +659,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[ ]:
+# In[16]:
 
 
 import scipy.optimize
@@ -681,7 +681,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[ ]:
+# In[17]:
 
 
 from typing import Optional
@@ -772,7 +772,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[ ]:
+# In[18]:
 
 
 ##################################################################################
@@ -1363,7 +1363,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[ ]:
+# In[19]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1386,7 +1386,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[ ]:
+# In[20]:
 
 
 import random
@@ -1406,7 +1406,7 @@ def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn,
 
 # ## plot fns
 
-# In[ ]:
+# In[21]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
@@ -1458,7 +1458,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[22]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
@@ -1510,7 +1510,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[23]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
@@ -1562,7 +1562,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[24]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
@@ -1600,7 +1600,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[25]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
@@ -1638,7 +1638,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[ ]:
+# In[26]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1690,7 +1690,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[ ]:
+# In[27]:
 
 
 def highest_activating_tokens(
@@ -1718,7 +1718,7 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
 
 
-# In[ ]:
+# In[28]:
 
 
 from rich import print as rprint
@@ -1744,7 +1744,7 @@ def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
     rprint(s)
 
 
-# In[ ]:
+# In[29]:
 
 
 def store_top_toks(top_acts_indices, top_acts_values, batch_tokens):
@@ -1757,7 +1757,7 @@ def store_top_toks(top_acts_indices, top_acts_values, batch_tokens):
 
 # ## get llm actv fns
 
-# In[ ]:
+# In[30]:
 
 
 from torch.utils.data import DataLoader, TensorDataset
@@ -1793,7 +1793,7 @@ def get_llm_actvs_batch(model, inputs, layerID):
 
 # ## get sae actv fns
 
-# In[ ]:
+# In[31]:
 
 
 def get_weights_and_acts(name, layer_id, outputs):
@@ -1819,7 +1819,7 @@ def get_weights_and_acts(name, layer_id, outputs):
     return weight_matrix, reshaped_activations
 
 
-# In[ ]:
+# In[32]:
 
 
 def get_weights_and_acts_byLayer(name, layer_id, outputs):
@@ -1840,7 +1840,7 @@ def get_weights_and_acts_byLayer(name, layer_id, outputs):
     return weight_matrix_np, reshaped_activations_A
 
 
-# In[ ]:
+# In[33]:
 
 
 def count_zero_columns(tensor):
@@ -1853,7 +1853,7 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[ ]:
+# In[33]:
 
 
 
@@ -1861,7 +1861,7 @@ def count_zero_columns(tensor):
 
 # # load data
 
-# In[ ]:
+# In[34]:
 
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -1870,14 +1870,14 @@ tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 tokenizer.pad_token = tokenizer.eos_token
 
 
-# In[ ]:
+# In[35]:
 
 
 from datasets import load_dataset
 dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
 
 
-# In[ ]:
+# In[36]:
 
 
 batch_size = 150
@@ -1902,20 +1902,20 @@ inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, ma
 
 # # load models
 
-# In[ ]:
+# In[37]:
 
 
 model = AutoModelForCausalLM.from_pretrained("google/gemma-2b")
 model_2 = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
 
 
-# In[ ]:
+# In[38]:
 
 
 inputs = {k: v.to('cuda') for k, v in inputs.items()}
 
 
-# In[ ]:
+# In[39]:
 
 
 model = model.to('cuda')
@@ -1923,7 +1923,7 @@ model = model.to('cuda')
 #     outputs = model(**inputs, output_hidden_states=True)
 
 
-# In[ ]:
+# In[40]:
 
 
 model_2 = model_2.to('cuda')
@@ -1931,7 +1931,7 @@ model_2 = model_2.to('cuda')
 #     outputs_2 = model_2(**inputs, output_hidden_states=True)
 
 
-# In[ ]:
+# In[41]:
 
 
 # del model
@@ -1940,15 +1940,15 @@ model_2 = model_2.to('cuda')
 
 # # run expm fn
 
-# In[ ]:
+# In[43]:
 
 
 # , outputs, outputs_2, layer_start, layer_end)
 def run_expm(layer_id, inputs):
+    model_B_layers = [18, 22]
     # model_B_layers = [0, 2, 6, 10, 14, 18, 22, 25]
-    model_B_layers = [2, 6, 10, 14, 18, 22]
-    junk_words = ['.', '\\n', '\n', '', ' ', '-' , '<bos>', ',', '!', '?',
-                  '<|endoftext|>', '|bos|']
+    # model_B_layers = [2, 6, 10, 14, 18, 22]
+    junk_words = ['.', ' \n', ' ', '-' , '<bos>', ',', '!', '?']
     layer_to_dictscores = {}
 
     with torch.inference_mode():
@@ -2010,6 +2010,7 @@ def run_expm(layer_id, inputs):
 
         filt_corr_ind_A = []
         filt_corr_ind_B = []
+        seen = set()
         for feat_B, feat_A in enumerate(highest_correlations_indices_AB):
             # if feat_B % 2000 == 0:
             #     print(feat_B)
@@ -2030,13 +2031,31 @@ def run_expm(layer_id, inputs):
 
         num_unq_pairs = len(list(set(filt_corr_ind_A)))
         print("% unique: ", num_unq_pairs / reshaped_activations_B.shape[-1])
-        print("num feats after filt: ", len(filt_corr_ind_A))
+        print("num feats after rmv kw: ", len(filt_corr_ind_A))
+
+        sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
+        kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+
+        oneToOne_A = []
+        oneToOne_B = []
+        seen = set()
+        for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+            if ind_A in kept_modA_feats:
+                oneToOne_A.append(ind_A)
+                oneToOne_B.append(ind_B)
+            elif ind_A not in seen:  # only keep one if it's over count X
+                seen.add(ind_A)
+                oneToOne_A.append(ind_A)
+                oneToOne_B.append(ind_B)
+        num_unq_pairs = len(list(set(oneToOne_A)))
+        print("% unique: ", num_unq_pairs / len(oneToOne_A))
+        print("num feats after 1-1: ", len(oneToOne_A))
 
         new_highest_correlations_indices_A = []
         new_highest_correlations_indices_B = []
         new_highest_correlations_values = []
 
-        for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+        for ind_A, ind_B in zip(oneToOne_A, oneToOne_B):
             val = highest_correlations_values_AB[ind_B]
             if val > 0.1:
                 new_highest_correlations_indices_A.append(ind_A)
@@ -2055,7 +2074,7 @@ def run_expm(layer_id, inputs):
         # sim tests
 
         num_feats = len(new_highest_correlations_indices_A)
-        num_runs = 10
+        num_runs = 100
 
         dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
 
@@ -2079,6 +2098,31 @@ def run_expm(layer_id, inputs):
 
         layer_to_dictscores[layerID_2] = dictscores
     return layer_to_dictscores
+
+
+# # loop L6 vs L18, 22
+
+# 100 rand runs
+
+# In[44]:
+
+
+layer_id = 6
+layer_to_dictscores = run_expm(layer_id, inputs)
+
+
+# In[45]:
+
+
+layer_to_dictscores
+
+
+# In[46]:
+
+
+with open(f'gemma1_L{layer_id}_gemma2_18_22.pkl', 'wb') as f:
+    pickle.dump(layer_to_dictscores, f)
+files.download(f'gemma1_L{layer_id}_gemma2_18_22.pkl')
 
 
 # # loop L0 vs others (intv 4)
@@ -2134,14 +2178,14 @@ plot_meanCorr_byLayer(layer_to_dictscores)
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
 # In[ ]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
 # # loop L6 vs others (intv 4)
@@ -2197,14 +2241,14 @@ plot_meanCorr_byLayer(layer_to_dictscores)
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
 # In[ ]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
 # # loop L10 vs others (intv 4)
@@ -2262,14 +2306,14 @@ plot_meanCorr_byLayer(layer_to_dictscores)
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
 # In[ ]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
 # # loop L12 vs others (intv 4)
@@ -2325,14 +2369,14 @@ plot_meanCorr_byLayer(layer_to_dictscores)
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
 # In[ ]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
 
 # # loop L17 vs others (intv 4)
@@ -2388,12 +2432,12 @@ plot_meanCorr_byLayer(layer_to_dictscores)
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_A_kept'])
+    print(key, val['num_feat_kept'])
 
 
 # In[ ]:
 
 
 for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_B_kept'])
+    print(key, val['num_feat_A_unique'])
 
