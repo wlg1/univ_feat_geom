@@ -10,7 +10,7 @@ This repository provides the code and resources for our research paper, **Sparse
 - **Visualization**: Scripts for generating heatmaps and visual aids to illustrate feature universality.
 
 ## Repository Structure
-- `notebooks/`: Jupyter notebooks with code for experiments and analyses.
+- `main_results_nbs/`: Jupyter notebooks with code for experiments and analyses.
 - `modal_scripts/`: Scripts for running experiments on various computational platforms.
 - `README.md`: Project documentation (you are here).
 
