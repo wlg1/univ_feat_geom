@@ -449,7 +449,6 @@ def align_spatial_dimensions(R: npt.NDArray, Rp: npt.NDArray) -> Tuple[npt.NDArr
     Rp_re = rearrange(Rp_re, "n c h w -> (n h w) c")
     if R_re.shape[0] > 5000:
 
-        # error in the notebook Michael made. just comment out for now shld be fine
         # logger.info(f"Got {R_re.shape[0]} samples in N after flattening. Subsampling to reduce compute.")
         subsample = R_re.shape[0] // 5000
         R_re = R_re[::subsample]
