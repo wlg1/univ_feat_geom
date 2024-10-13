@@ -23,9 +23,10 @@ This repository provides the code and resources for our research paper, **Sparse
 
 ### Installation
 Clone the repository and install dependencies:
-```bash
-git clone https://github.com/yourusername/univ_feat_geom.git
-cd univ_feat_geom
+
+```bash```
+git clone https://github.com/yourusername/univ_feat_geom.git \
+cd univ_feat_geom \
 pip install -r requirements.txt
 
 
@@ -37,7 +38,8 @@ Citations
 
 If you use this code or our findings in your research, please cite our paper:
 
-@article{barez2024sparse,
+```
+@article{lan2024sparse,
   title={Sparse Autoencoders Reveal Universal Feature Spaces Across Large Language Models},
   author={Lan, Michael and Torr, Philip and Meek, Austin and Khakzar, Ashkan and Krueger, David and Barez, Fazl},
   journal={Journal/Conference Name},
