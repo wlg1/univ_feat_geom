@@ -3,26 +3,26 @@
 
 # # setup
 
-# In[1]:
+# In[ ]:
 
 
 import logging
 logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
 
 
-# In[2]:
+# In[ ]:
 
 
 # !pip install datasets
 
 
-# In[3]:
+# In[ ]:
 
 
 get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
 
 
-# In[4]:
+# In[ ]:
 
 
 import pdb
@@ -30,7 +30,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import load_dataset
 
 
-# In[5]:
+# In[ ]:
 
 
 import gc
@@ -63,7 +63,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ## corr fns
 
-# In[6]:
+# In[ ]:
 
 
 def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of rows per chunk
@@ -91,7 +91,7 @@ def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of r
     return torch.tensor(normalized_A)
 
 
-# In[7]:
+# In[ ]:
 
 
 def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
@@ -133,7 +133,7 @@ def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_si
 
 # The following functions are from: https://github.com/mklabunde/resi/tree/main/repsim/measures
 
-# In[8]:
+# In[ ]:
 
 
 import functools
@@ -239,7 +239,7 @@ class Pipeline:
         )
 
 
-# In[9]:
+# In[ ]:
 
 
 from typing import List, Set, Union
@@ -296,7 +296,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[10]:
+# In[ ]:
 
 
 import functools
@@ -623,7 +623,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[11]:
+# In[ ]:
 
 
 import scipy.optimize
@@ -645,7 +645,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[12]:
+# In[ ]:
 
 
 from typing import Optional
@@ -736,7 +736,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[13]:
+# In[ ]:
 
 
 ##################################################################################
@@ -1327,7 +1327,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[14]:
+# In[ ]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1350,7 +1350,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[15]:
+# In[ ]:
 
 
 import random
@@ -1370,7 +1370,7 @@ def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn,
 
 # ## plot fns
 
-# In[16]:
+# In[ ]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
@@ -1421,7 +1421,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[17]:
+# In[ ]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
@@ -1472,7 +1472,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[18]:
+# In[ ]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
@@ -1523,7 +1523,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[19]:
+# In[ ]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
@@ -1560,7 +1560,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[20]:
+# In[ ]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
@@ -1597,7 +1597,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[21]:
+# In[ ]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1649,7 +1649,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[22]:
+# In[ ]:
 
 
 def highest_activating_tokens(
@@ -1677,7 +1677,7 @@ def highest_activating_tokens(
     return torch.stack([top_acts_batch, top_acts_seq], dim=-1) # , top_acts_values
 
 
-# In[23]:
+# In[ ]:
 
 
 def store_top_toks(top_acts_indices, batch_tokens):
@@ -1690,7 +1690,7 @@ def store_top_toks(top_acts_indices, batch_tokens):
 
 # ## get llm actv fns
 
-# In[24]:
+# In[ ]:
 
 
 from torch.utils.data import DataLoader, TensorDataset
@@ -1725,7 +1725,7 @@ def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
 
 # ## get sae actv fns
 
-# In[25]:
+# In[ ]:
 
 
 def get_weights_and_acts(name, layer_id, outputs):
@@ -1747,7 +1747,7 @@ def get_weights_and_acts(name, layer_id, outputs):
     # return weight_matrix_np, reshaped_activations_A
 
 
-# In[26]:
+# In[ ]:
 
 
 def get_weights_and_acts_byLayer(name, layer_id, outputs):
@@ -1768,7 +1768,7 @@ def get_weights_and_acts_byLayer(name, layer_id, outputs):
     # return weight_matrix_np, reshaped_activations_A
 
 
-# In[27]:
+# In[ ]:
 
 
 def count_zero_columns(tensor):
@@ -1781,7 +1781,7 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[28]:
+# In[ ]:
 
 
 def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end, num_runs=100, oneToOne_bool=False):
@@ -1911,14 +1911,14 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end, num_runs=100,
 
 # # load data
 
-# In[29]:
+# In[ ]:
 
 
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
 tokenizer.pad_token = tokenizer.eos_token
 
 
-# In[30]:
+# In[ ]:
 
 
 dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True, trust_remote_code=True)
@@ -2076,7 +2076,7 @@ totalWordsinAllPrompts
 inputs['input_ids'].shape[0] * inputs['input_ids'].shape[1]
 
 
-# In[35]:
+# In[ ]:
 
 
 # for each word group, group the tokens of the model into word
@@ -2220,7 +2220,7 @@ max_corr_inds
 
 # # load models (both pythia)
 
-# In[57]:
+# In[ ]:
 
 
 model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m")
@@ -2229,7 +2229,7 @@ model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-160m")
 
 # ## get LLM actvs
 
-# In[58]:
+# In[ ]:
 
 
 with torch.inference_mode():
@@ -2278,7 +2278,7 @@ sum(max_corr_vals) / len(max_corr_vals)
 
 # # test saes: both pythia
 
-# In[59]:
+# In[ ]:
 
 
 layer_id = 3
@@ -2407,7 +2407,7 @@ svcca(weight_matrix_np[oneToOne_A], weight_matrix_2[oneToOne_B], "nd")
 
 # # more data
 
-# In[31]:
+# In[ ]:
 
 
 batch_size = 100
@@ -2427,7 +2427,7 @@ dataset_iter = iter(dataset)
 batch = get_next_batch(dataset_iter, batch_size)
 
 
-# In[51]:
+# In[ ]:
 
 
 # temp fix for CO₂
@@ -2436,13 +2436,13 @@ filtered_strings = [s for s in batch if "₂" not in s]
 inputs = tokenizer(filtered_strings, return_tensors="pt", padding=True, truncation=True, max_length=maxseqlen)
 
 
-# In[52]:
+# In[ ]:
 
 
 inputs['input_ids'].shape
 
 
-# In[53]:
+# In[ ]:
 
 
 # for every prompt, split it and get total words
@@ -2457,13 +2457,13 @@ for i in range(len(inputs['input_ids'])):
     totalWordsinAllPrompts += len(word_groups)
 
 
-# In[54]:
+# In[ ]:
 
 
 totalWordsinAllPrompts
 
 
-# In[55]:
+# In[ ]:
 
 
 # for each word group, group the tokens of the model into word
@@ -2499,7 +2499,7 @@ def get_all_tokenGroups_for_prompt(all_word_groups):
     return all_prompts_tokenGroups
 
 
-# In[56]:
+# In[ ]:
 
 
 all_prompts_tokenGroups = get_all_tokenGroups_for_prompt(all_word_groups)
@@ -2521,7 +2521,7 @@ name = "EleutherAI/sae-pythia-160m-32k"
 weight_matrix_2, reshaped_activations_B, feature_acts_model_B = get_weights_and_acts_byLayer(name, layerID_2, outputs_2)
 
 
-# In[60]:
+# In[ ]:
 
 
 word_dim_output_sae = torch.zeros((totalWordsinAllPrompts), reshaped_activations_A.shape[-1])
@@ -2535,7 +2535,7 @@ for token_group_to_word in all_prompts_tokenGroups:
     word_actvs_index += 1
 
 
-# In[61]:
+# In[ ]:
 
 
 word_dim_output_sae_2 = torch.zeros((totalWordsinAllPrompts), reshaped_activations_B.shape[-1])
@@ -2551,69 +2551,69 @@ for token_group_to_word in all_prompts_tokenGroups:
 
 # ## get corrs
 
-# In[62]:
+# In[ ]:
 
 
 max_corr_inds_smae, max_corr_vals_smae = batched_correlation(word_dim_output_sae, word_dim_output_sae)
 
 
-# In[63]:
+# In[ ]:
 
 
 plt.hist(max_corr_vals_smae)
 plt.show()
 
 
-# In[64]:
+# In[ ]:
 
 
 sum(max_corr_vals_smae) / len(max_corr_vals_smae)
 
 
-# In[65]:
+# In[ ]:
 
 
 max_corr_inds, max_corr_vals = batched_correlation(word_dim_output_sae, word_dim_output_sae_2)
 
 
-# In[66]:
+# In[ ]:
 
 
 word_dim_output_sae.shape
 
 
-# In[68]:
+# In[ ]:
 
 
 len(max_corr_inds)
 
 
-# In[67]:
+# In[ ]:
 
 
 len(set(max_corr_inds))
 
 
-# In[69]:
+# In[ ]:
 
 
 sum(max_corr_vals) / len(max_corr_vals)
 
 
-# In[70]:
+# In[ ]:
 
 
 plt.hist(max_corr_vals)
 plt.show()
 
 
-# In[71]:
+# In[ ]:
 
 
 svcca(weight_matrix_np[max_corr_inds], weight_matrix_2, "nd")
 
 
-# In[72]:
+# In[ ]:
 
 
 sorted_feat_counts = Counter(max_corr_inds).most_common()
@@ -2635,21 +2635,21 @@ print("% unique: ", num_unq_pairs / len(oneToOne_A))
 print("num feats after 1-1: ", len(oneToOne_A))
 
 
-# In[73]:
+# In[ ]:
 
 
 # paired right
 svcca(weight_matrix_np[oneToOne_A], weight_matrix_2[oneToOne_B], "nd")
 
 
-# In[75]:
+# In[ ]:
 
 
 # wrongly paired
 svcca(weight_matrix_np[oneToOne_B], weight_matrix_2[oneToOne_A], "nd")
 
 
-# In[78]:
+# In[ ]:
 
 
 num_runs = 10
@@ -2799,7 +2799,7 @@ def get_weights_and_acts_byLayer(name, layer_id, outputs):
     # return weight_matrix_np, reshaped_activations_A
 
 
-# In[79]:
+# In[ ]:
 
 
 # layer_id = 3

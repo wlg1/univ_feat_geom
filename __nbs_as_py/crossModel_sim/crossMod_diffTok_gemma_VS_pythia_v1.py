@@ -1,45 +1,39 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# # hf login
+# 
+# NOTE: must login to huggingface before running.
+
+# In[1]:
+
+
+from huggingface_hub import hf_hub_download, notebook_login
+notebook_login()
+
+
 # # setup
 
 # In[1]:
 
 
-import logging
-logging.getLogger().setLevel(logging.ERROR) # suppress the SafeTensors loading messages
+get_ipython().run_cell_magic('capture', '', '%pip install sae-lens\n')
 
 
 # In[2]:
 
 
-# from google.colab import drive
-# drive.mount('/content/drive')
+import pdb
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from datasets import load_dataset
 
 
 # In[3]:
 
 
-get_ipython().run_cell_magic('capture', '', '!pip install git+https://github.com/EleutherAI/sae.git\n')
-
-
-# In[4]:
-
-
-# you should load this before cloning repo files
-# from .config import SaeConfig
-# from .utils import decoder_impl
-
-from sae.config import SaeConfig
-from sae.utils import decoder_impl
-from sae import Sae
-
-
-# In[5]:
-
-
 import gc
 import pickle
+from google.colab import files
 import numpy as np
 import matplotlib.pyplot as plt
 import json
@@ -47,6 +41,9 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import NamedTuple, Optional, Callable, Union, List, Tuple
 # from jaxtyping import Float, Int
+from collections import Counter
+import seaborn as sns
+import pandas as pd
 
 import einops
 import torch
@@ -55,18 +52,14 @@ from huggingface_hub import snapshot_download
 from natsort import natsorted
 from safetensors.torch import load_model, save_model
 
+from sae_lens import SAE
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
-
-# In[6]:
-
-
-from collections import Counter
 
 
 # ## corr fns
 
-# In[7]:
+# In[4]:
 
 
 def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of rows per chunk
@@ -94,7 +87,7 @@ def normalize_byChunks(actv_tensor, chunk_size=10000): # chunk_size: Number of r
     return torch.tensor(normalized_A)
 
 
-# In[8]:
+# In[5]:
 
 
 def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_size=100):
@@ -134,7 +127,9 @@ def batched_correlation(reshaped_activations_A, reshaped_activations_B, batch_si
 
 # ## sim fns
 
-# In[9]:
+# The following functions are from: https://github.com/mklabunde/resi/tree/main/repsim/measures
+
+# In[6]:
 
 
 import functools
@@ -240,7 +235,7 @@ class Pipeline:
         )
 
 
-# In[10]:
+# In[7]:
 
 
 from typing import List, Set, Union
@@ -297,7 +292,7 @@ def nn_array_to_setlist(nn: npt.NDArray) -> List[Set[int]]:
     return [set(idx) for idx in nn]
 
 
-# In[11]:
+# In[8]:
 
 
 import functools
@@ -624,7 +619,7 @@ def flatten_nxcxhxw_to_nxchw(R: Union[torch.Tensor, npt.NDArray]) -> torch.Tenso
     return R
 
 
-# In[12]:
+# In[9]:
 
 
 import scipy.optimize
@@ -646,7 +641,7 @@ def permutation_procrustes(
     return float(np.linalg.norm(R[:, PR] - Rp[:, PRp], ord="fro"))
 
 
-# In[13]:
+# In[10]:
 
 
 from typing import Optional
@@ -737,7 +732,7 @@ class RSA(RSMSimilarityMeasure):
         )
 
 
-# In[14]:
+# In[11]:
 
 
 ##################################################################################
@@ -1328,7 +1323,7 @@ class PWCCA(RepresentationalSimilarityMeasure):
 
 # ## get rand
 
-# In[15]:
+# In[12]:
 
 
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
@@ -1351,7 +1346,7 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
     return sum(all_rand_scores) / len(all_rand_scores)
 
 
-# In[16]:
+# In[13]:
 
 
 import random
@@ -1371,7 +1366,7 @@ def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn,
 
 # ## plot fns
 
-# In[17]:
+# In[14]:
 
 
 def plot_svcca_byLayer(layer_to_dictscores):
@@ -1422,7 +1417,7 @@ def plot_svcca_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[18]:
+# In[15]:
 
 
 def plot_rsa_byLayer(layer_to_dictscores):
@@ -1473,7 +1468,7 @@ def plot_rsa_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[19]:
+# In[16]:
 
 
 def plot_meanCorr_byLayer(layer_to_dictscores):
@@ -1524,7 +1519,7 @@ def plot_meanCorr_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[20]:
+# In[17]:
 
 
 def plot_meanCorr_filt_byLayer(layer_to_dictscores):
@@ -1561,7 +1556,7 @@ def plot_meanCorr_filt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[21]:
+# In[18]:
 
 
 def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
@@ -1598,7 +1593,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
     plt.show()
 
 
-# In[22]:
+# In[19]:
 
 
 # def plot_js_byLayer(layer_to_dictscores):
@@ -1650,7 +1645,7 @@ def plot_numFeats_afterFilt_byLayer(layer_to_dictscores):
 
 # ## interpret fns
 
-# In[23]:
+# In[20]:
 
 
 def highest_activating_tokens(
@@ -1675,45 +1670,28 @@ def highest_activating_tokens(
     top_acts_batch = top_acts_indices // seq_len
     top_acts_seq = top_acts_indices % seq_len
 
-    return torch.stack([top_acts_batch, top_acts_seq], dim=-1), top_acts_values
+    return torch.stack([top_acts_batch, top_acts_seq], dim=-1) # , top_acts_values
 
 
-# In[24]:
+# In[21]:
 
 
-from rich import print as rprint
-def display_top_sequences(top_acts_indices, top_acts_values, batch_tokens):
-    s = ""
-    for (batch_idx, seq_idx), value in zip(top_acts_indices, top_acts_values):
-        # s += f'{batch_idx}\n'
-        s += f'batchID: {batch_idx}, '
-        # Get the sequence as a string (with some padding on either side of our sequence)
-        seq_start = max(seq_idx - 5, 0)
-        seq_end = min(seq_idx + 5, batch_tokens.shape[1])
-        seq = ""
-        # Loop over the sequence, adding each token to the string (highlighting the token with the large activations)
-        for i in range(seq_start, seq_end):
-            # new_str_token = model.to_single_str_token(batch_tokens[batch_idx, i].item()).replace("\n", "\\n").replace("<|BOS|>", "|BOS|")
-            new_str_token = tokenizer.decode([batch_tokens[batch_idx, i].item()]).replace("\n", "\\n").replace("<|BOS|>", "|BOS|")
-            if i == seq_idx:
-                new_str_token = f"[bold u dark_orange]{new_str_token}[/]"
-            seq += new_str_token
-        # Print the sequence, and the activation value
-        s += f'Act = {value:.2f}, Seq = "{seq}"\n'
-
-    rprint(s)
+def store_top_toks(top_acts_indices, batch_tokens):
+    feat_samps = []
+    for (batch_idx, seq_idx) in top_acts_indices:
+        new_str_token = tokenizer.decode(batch_tokens[batch_idx, seq_idx]) #.replace("\n", "\\n").replace("<|BOS|>", "|BOS|")
+        feat_samps.append(new_str_token)
+    return feat_samps
 
 
 # ## get llm actv fns
 
-# In[25]:
+# In[22]:
 
 
 from torch.utils.data import DataLoader, TensorDataset
 
-def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
-# def get_llm_actvs_batch(model, inputs, batch_size=100, maxseqlen=300):
-    # outputs_by_layer = {None for layerID in len(model.gpt_neox.layers)}
+def get_llm_actvs_batch(model, inputs, layerID):
     accumulated_outputs = None
     dataset = TensorDataset(inputs['input_ids'], inputs['attention_mask'])
     loader = DataLoader(dataset, batch_size=32, shuffle=False)
@@ -1723,14 +1701,14 @@ def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
         input_ids, attention_mask = batch
 
         batch_inputs = {'input_ids': input_ids.to(model.device), 'attention_mask': attention_mask.to(model.device)}
-        with torch.no_grad():  # Disable gradient calculation for memory efficiency
+        with torch.no_grad():
             outputs = model(**batch_inputs, output_hidden_states=True)
             if accumulated_outputs is None:
-                accumulated_outputs = outputs.hidden_states[layer_id]
+                accumulated_outputs = outputs.hidden_states[layerID]
                 # for layer_id in len(model.gpt_neox.layers):
                     # outputs_by_layer[layer_id] = outputs.hidden_states[layer_id]
             else:
-                accumulated_outputs = torch.cat((accumulated_outputs, outputs.hidden_states[layer_id]), dim= 0)
+                accumulated_outputs = torch.cat((accumulated_outputs, outputs.hidden_states[layerID]), dim= 0)
 
         del batch_inputs, outputs
         torch.cuda.empty_cache()
@@ -1741,36 +1719,38 @@ def get_llm_actvs_batch(model, inputs, layerID, batch_size=100, maxseqlen=300):
 
 # ## get sae actv fns
 
-# In[26]:
+# In[23]:
 
 
-# def get_weights_and_acts(name, cfg_dict, layer_id, outputs):
 def get_weights_and_acts(name, layer_id, outputs):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    hookpoint = "layers." + str(layer_id)
 
-    sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
+    sae, cfg_dict, sparsity = SAE.from_pretrained(
+        release = "gemma-2b-res-jb",
+        sae_id = f"blocks.{layer_id}.hook_resid_post",
+    )
+    sae = sae.to('cuda')
+    sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
 
-    weight_matrix_np = sae.W_dec.cpu().detach().numpy()
+    weight_matrix = sae.W_dec.cpu().detach().numpy()
 
     with torch.inference_mode():
-        reshaped_activations_A = sae.pre_acts(outputs.to("cuda"))
-        # reshaped_activations_A = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
-        # orig = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
+        reshaped_activations = sae.encode(outputs)
+        # reshaped_activations = sae.pre_acts(outputs.hidden_states[layer_id].to("cuda"))
 
-    first_dim_reshaped = reshaped_activations_A.shape[0] * reshaped_activations_A.shape[1]
-    reshaped_activations_A = reshaped_activations_A.reshape(first_dim_reshaped, reshaped_activations_A.shape[-1]).cpu()
+    first_dim_reshaped = reshaped_activations.shape[0] * reshaped_activations.shape[1]
+    reshaped_activations = reshaped_activations.reshape(first_dim_reshaped, reshaped_activations.shape[-1]).cpu()
 
     # return weight_matrix_np, reshaped_activations_A, orig
-    return weight_matrix_np, reshaped_activations_A
+    return weight_matrix, reshaped_activations
 
 
-# In[27]:
+# In[24]:
 
 
-def get_410m_weights_and_acts_byLayer(name, layer_id, outputs):
+def get_weights_and_acts_byLayer(name, layer_id, outputs):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    hookpoint = "layers." + str(layer_id) + ".mlp"
+    hookpoint = "layers." + str(layer_id)
 
     sae = Sae.load_from_hub(name, hookpoint=hookpoint, device=device)
 
@@ -1786,7 +1766,7 @@ def get_410m_weights_and_acts_byLayer(name, layer_id, outputs):
     return weight_matrix_np, reshaped_activations_A
 
 
-# In[28]:
+# In[25]:
 
 
 def count_zero_columns(tensor):
@@ -1799,89 +1779,157 @@ def count_zero_columns(tensor):
 
 # ## run expm fns
 
-# In[29]:
+# In[26]:
 
 
-def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
+# , outputs, outputs_2, layer_start, layer_end)
+def run_expm(layer_id, inputs, num_runs=100, oneToOne_bool=False):
+    # model_B_layers = [2, 6, 10, 14, 18, 22]
+    model_B_layers = [2, 6]
+    # junk_words = ['.', ' \n', ' ', '-' , '<bos>', ',', '!', '?']
+    junk_words = ['.', '\\n', '\n', '', ' ', '-' , '<bos>', ',', '!', '?',
+                '<|endoftext|>', '|bos|', '<pad>']
     layer_to_dictscores = {}
 
-    name = "EleutherAI/sae-pythia-70m-32k"
-    weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, layer_id, outputs)
+    with torch.inference_mode():
+        outputs = get_llm_actvs_batch(model, inputs, layer_id)
 
-    name = "EleutherAI/sae-pythia-160m-32k"
-    for layerID_2 in range(layer_start, layer_end): # 0, 12
+    # weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, layer_id, outputs)
+    sae, cfg_dict, sparsity = SAE.from_pretrained(
+        release = "gemma-2b-res-jb",
+        sae_id = f"blocks.{layer_id}.hook_resid_post",
+    )
+    weight_matrix_np = sae.W_dec.cpu().detach().numpy()
+
+    sae = sae.to('cuda')
+    sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+    with torch.no_grad():
+        # reshaped_activations_A = sae.encode(outputs.hidden_states[layerID])
+        feature_acts_model_A = sae.encode(outputs)
+    first_dim_reshaped = feature_acts_model_A.shape[0] * feature_acts_model_A.shape[1]
+    reshaped_activations_A = feature_acts_model_A.reshape(first_dim_reshaped, feature_acts_model_A.shape[-1]).cpu()
+
+    # for layerID_2 in range(layer_start, layer_end): # 0, 12
+    for layerID_2 in model_B_layers: # 0, 12
+        print("Model B Layer: " + str(layerID_2))
         dictscores = {}
 
-        weight_matrix_2, reshaped_activations_B = get_weights_and_acts_byLayer(name, layerID_2, outputs_2)
+        with torch.inference_mode():
+            outputs_2 = get_llm_actvs_batch(model_2, inputs, layerID_2)
+
+        # weight_matrix_2, reshaped_activations_B = get_weights_and_acts_byLayer(name, layerID_2, outputs_2)
+        sae_2, cfg_dict, sparsity = SAE.from_pretrained(
+            release = "gemma-scope-2b-pt-res-canonical",
+            sae_id = f"layer_{layerID_2}/width_16k/canonical",
+        )
+        weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+
+        sae_2 = sae_2.to('cuda')
+        sae_2.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+        with torch.no_grad():
+            # reshaped_activations_B = sae_2.encode(outputs_2.hidden_states[layer_id_2])
+            feature_acts_model_B = sae_2.encode(outputs_2)
+        first_dim_reshaped = feature_acts_model_B.shape[0] * feature_acts_model_B.shape[1]
+        reshaped_activations_B = feature_acts_model_B.reshape(first_dim_reshaped, feature_acts_model_B.shape[-1]).cpu()
 
         """
         `batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
-        highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
+        max_corr_inds contains modA's feats as inds, and modB's feats as vals.
         Use the list with smaller number of features (cols) as the second arg
         """
-        highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+        max_corr_inds, max_corr_vals = batched_correlation(reshaped_activations_A, reshaped_activations_B)
 
-        # num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
-        # print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
+        # num_unq_pairs = len(list(set(max_corr_inds)))
+        # print("% unique: ", num_unq_pairs / len(max_corr_inds))
 
-        dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+        dictscores["mean_actv_corr"] = sum(max_corr_vals) / len(max_corr_vals)
 
         ###########
         # filter
-
-        sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
-        # kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 100]
-        kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+        samp_m = 5
 
         filt_corr_ind_A = []
         filt_corr_ind_B = []
-        seen = set()
-        for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
-            if ind_A in kept_modA_feats:
-                filt_corr_ind_A.append(ind_A)
-                filt_corr_ind_B.append(ind_B)
-            elif ind_A not in seen:  # only keep one if it's over count X
-                seen.add(ind_A)
-                filt_corr_ind_A.append(ind_A)
-                filt_corr_ind_B.append(ind_B)
-        # num_unq_pairs = len(list(set(filt_corr_ind_A)))
-        # print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
-        # print("num feats after filt: ", len(filt_corr_ind_A))
+        for feat_B, feat_A in enumerate(max_corr_inds):
+            # if feat_B % 2000 == 0:
+            #     print(feat_B)
+            ds_top_acts_indices = highest_activating_tokens(feature_acts_model_A, feat_A, samp_m, batch_tokens= inputs['input_ids'])
+            top_A_labels = store_top_toks(ds_top_acts_indices, inputs['input_ids'])
 
-        new_highest_correlations_indices_A = []
-        new_highest_correlations_indices_B = []
-        new_highest_correlations_values = []
+            ds_top_acts_indices = highest_activating_tokens(feature_acts_model_B, feat_B, samp_m, batch_tokens= inputs['input_ids'])
+            top_B_labels = store_top_toks(ds_top_acts_indices, inputs['input_ids'])
+
+            flag = True
+            for junk in junk_words:
+                if junk in top_A_labels or junk in top_B_labels:
+                    flag = False
+                    break
+            if flag and len(set(top_A_labels).intersection(set(top_B_labels))) > 0:
+                filt_corr_ind_A.append(feat_A)
+                filt_corr_ind_B.append(feat_B)
+
+        num_unq_pairs = len(list(set(filt_corr_ind_A)))
+        print("% unique: ", num_unq_pairs / reshaped_activations_B.shape[-1])
+        print("num feats after rmv kw: ", len(filt_corr_ind_A))
+
+        if oneToOne_bool:
+            sorted_feat_counts = Counter(max_corr_inds).most_common()
+            kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+
+            oneToOne_A = []
+            oneToOne_B = []
+            seen = set()
+            for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
+                if ind_A in kept_modA_feats:
+                    oneToOne_A.append(ind_A)
+                    oneToOne_B.append(ind_B)
+                elif ind_A not in seen:  # only keep one if it's over count X
+                    seen.add(ind_A)
+                    oneToOne_A.append(ind_A)
+                    oneToOne_B.append(ind_B)
+            num_unq_pairs = len(list(set(oneToOne_A)))
+            print("% unique: ", num_unq_pairs / len(oneToOne_A))
+            print("num feats after 1-1: ", len(oneToOne_A))
+
+            filt_corr_ind_A = oneToOne_A
+            filt_corr_ind_B = oneToOne_B
+
+        new_max_corr_inds_A = []
+        new_max_corr_inds_B = []
+        new_max_corr_vals = []
 
         for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
-            val = highest_correlations_values_AB[ind_B]
-            if val > 0:
-                new_highest_correlations_indices_A.append(ind_A)
-                new_highest_correlations_indices_B.append(ind_B)
-                new_highest_correlations_values.append(val)
+        # for ind_A, ind_B in zip(oneToOne_A, oneToOne_B):
+            val = max_corr_vals[ind_B]
+            if val > 0.1:
+                new_max_corr_inds_A.append(ind_A)
+                new_max_corr_inds_B.append(ind_B)
+                new_max_corr_vals.append(val)
 
-        # print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
-        # print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
-        dictscores["num_feat_kept"] = len(new_highest_correlations_indices_A)
+        num_unq_pairs = len(list(set(new_max_corr_inds_A)))
+        print("% unique after rmv 0s: ", num_unq_pairs / reshaped_activations_B.shape[-1])
+        print("num feats after rmv 0s: ", len(new_max_corr_inds_A))
+        dictscores["num_feat_kept"] = len(new_max_corr_inds_A)
+        dictscores["num_feat_A_unique"] = len(list(set(new_max_corr_inds_A)))
 
-        dictscores["mean_actv_corr_filt"] = sum(new_highest_correlations_values) / len(new_highest_correlations_values)
+        dictscores["mean_actv_corr_filt"] = sum(new_max_corr_vals) / len(new_max_corr_vals)
 
         ###########
         # sim tests
 
-        num_feats = len(new_highest_correlations_indices_A)
-        num_runs = 100
+        num_feats = len(new_max_corr_inds_A)
 
-        dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+        dictscores["svcca_paired"] = svcca(weight_matrix_np[new_max_corr_inds_A], weight_matrix_2[new_max_corr_inds_B], "nd")
 
-        rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                                    weight_matrix_2[new_highest_correlations_indices_B], num_feats,
+        rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_max_corr_inds_A],
+                                    weight_matrix_2[new_max_corr_inds_B], num_feats,
                                     svcca, shapereq_bool=True)
         dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
         dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
 
-        dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-        rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                                                    weight_matrix_2[new_highest_correlations_indices_B], num_feats,
+        dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_np[new_max_corr_inds_A], weight_matrix_2[new_max_corr_inds_B], "nd")
+        rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_max_corr_inds_A],
+                                                    weight_matrix_2[new_max_corr_inds_B], num_feats,
                                                     representational_similarity_analysis, shapereq_bool=True)
         dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
         dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
@@ -1897,27 +1945,31 @@ def run_expm(layer_id, outputs, outputs_2, layer_start, layer_end):
 
 # # load data
 
+# In[27]:
+
+
+tokenizer_1 = AutoTokenizer.from_pretrained("google/gemma-2b")
+tokenizer_1.pad_token = tokenizer_1.eos_token
+
+
+# In[28]:
+
+
+tokenizer_2 = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m-deduped")
+tokenizer_2.pad_token = tokenizer_2.eos_token
+
+
+# In[29]:
+
+
+dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True, trust_remote_code=True)
+
+
 # In[30]:
 
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-160m")
-tokenizer.pad_token = tokenizer.eos_token
-
-
-# In[31]:
-
-
-from datasets import load_dataset
-dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
-
-
-# In[32]:
-
-
-batch_size = 100
-maxseqlen = 300
+batch_size = 50
+# maxseqlen = 100
 
 def get_next_batch(dataset_iter, batch_size=100):
     batch = []
@@ -1931,615 +1983,982 @@ def get_next_batch(dataset_iter, batch_size=100):
 
 dataset_iter = iter(dataset)
 batch = get_next_batch(dataset_iter, batch_size)
-inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=maxseqlen)
+
+
+# In[31]:
+
+
+# temp fix for CO₂
+filtered_strings = [s for s in batch if "₂" not in s]
+# Tokenize the batch
+# inputs_1 = tokenizer_1(filtered_strings, return_tensors="pt", padding=True, truncation=True, max_length=maxseqlen)
+# inputs_2 = tokenizer_2(filtered_strings, return_tensors="pt", padding=True, truncation=True, max_length=maxseqlen)
+
+
+# In[32]:
+
+
+# print(inputs_1['input_ids'].shape)
+# print(inputs_2['input_ids'].shape)
+# len(filtered_strings)
+
+
+# In[33]:
+
+
+# len(inputs_1.encodings)
+
+
+# # get word groups
+
+# ## attempt 1
+
+# In[ ]:
+
+
+def get_all_tokenGroups_for_prompt(samples_as_strings, inputs, tokenizer):
+    # junk_words = ['.', '\\n', '\n', '', ' ', '-' , '<bos>', ',', '!', '?',
+    #             '<|endoftext|>', '|bos|', '<pad>']
+    junk_words = ['\\n', '\n',  '<bos>', '<|endoftext|>', '|bos|', '<pad>']
+
+    # for every prompt, split it and get total words
+    all_word_groups = []
+    for samp_as_str in samples_as_strings:
+        for junk in junk_words:
+            samp_as_str = samp_as_str.replace(junk, '')
+        word_groups = samp_as_str.split(' ')
+        all_word_groups.append(word_groups)
+
+    # for each word group, group the tokens of the model into word
+    all_prompts_tokenGroups = []
+    for word_groups_id, word_groups in enumerate(all_word_groups):
+        # all_tokenGroups_for_prompt = []
+        curr_tok_index = 0
+        for word in word_groups:
+            word_so_far = ''
+            token_group_to_word = []
+            while True:
+                try:
+                    tokId = inputs['input_ids'][word_groups_id][curr_tok_index]
+                except:
+                    pdb.set_trace()
+                decoded_token = tokenizer.decode(tokId)
+                flag = False
+                for junk in junk_words:
+                    if junk in decoded_token:
+                        curr_tok_index += 1
+                        flag = True
+                        if junk != '<bos>':
+                            pdb.set_trace()
+                        break
+                if flag:
+                    continue
+                if decoded_token[0] == ' ':
+                    decoded_token = decoded_token.replace(' ', '')
+                word_so_far += decoded_token
+                # pdb.set_trace()
+                token_group_to_word.append(tokId)
+                curr_tok_index += 1
+                if word_so_far == word:
+                    # done with word, move on to next word but DON'T RESET next token
+                    all_prompts_tokenGroups.append(token_group_to_word)
+                    break
+    return all_prompts_tokenGroups
+
+
+# In[ ]:
+
+
+all_prompts_tokenGroups_1 = get_all_tokenGroups_for_prompt(filtered_strings, inputs_1, tokenizer_1)
+len(all_prompts_tokenGroups_1)
+
+
+# ## attempt 1b
+
+# In[34]:
+
+
+# junk_words = ['\\n', '\n',  '<bos>', '<|endoftext|>', '|bos|', '<pad>']
+# maxseqlen = 100
+
+# all_prompts_tokenGroups = []
+# # for every prompt, split it and get total words
+# all_word_groups = []
+# all_prompts_truncated = []
+# for samp_as_str in filtered_strings:
+#     for junk in junk_words:
+#         samp_as_str = samp_as_str.replace(junk, '')
+#     word_groups = samp_as_str.split(' ')[:maxseqlen] # only take maxseqlen number of words
+#     all_word_groups.append(word_groups)
+#     truncated_prompt = ' '.join(word_groups)
+#     all_prompts_truncated.append(truncated_prompt)
+
+# tokens = tokenizer_2(all_prompts_truncated, return_tensors="pt", padding=True, truncation=True, max_length=maxseqlen)
+
+
+# In[35]:
+
+
+# word_groups = all_word_groups[0]
+
+# # Process each entry in word_groups by splitting on periods and flattening
+# processed_groups = []
+# for word in word_groups:
+#     processed_groups.extend(word.split('.'))
+
+# # Remove empty strings caused by consecutive periods, if any
+# processed_groups = [word for word in processed_groups if word]
+
+# print(processed_groups)
+
+
+# In[36]:
+
+
+# for curr_tok_index in range(0, 100):
+#     tokId = tokens['input_ids'][0][curr_tok_index]
+#     decoded_token = tokenizer_2.decode(tokId)
+#     print(curr_tok_index, decoded_token)
+#     curr_tok_index += 1
+
+
+# In[37]:
+
+
+def get_all_tokenGroups_for_prompt(samples_as_strings, tokenizer):
+    # junk_words = ['.', '\\n', '\n', '', ' ', '-' , '<bos>', ',', '!', '?',
+    #             '<|endoftext|>', '|bos|', '<pad>']
+    junk_words = ['\\n', '\n',  '<bos>', '<|endoftext|>', '|bos|', '<pad>', '<eos>']
+    max_word_len = 100
+
+    all_prompts_tokenGroups = []
+    # for every prompt, split it and get total words
+    all_word_groups = [] # loop through individual words here
+    all_prompts_truncated = [] # used to create tokenizer prompts
+    for samp_as_str in samples_as_strings:
+        for junk in junk_words:
+            samp_as_str = samp_as_str.replace(junk, '')
+        word_groups = samp_as_str.split(' ')[:max_word_len] # only take maxseqlen number of words
+
+        # Process each entry in word_groups by splitting on periods and flattening
+        processed_groups = []
+        for word in word_groups:
+            processed_groups.extend(word.split('.'))
+
+        # Remove empty strings caused by consecutive periods, if any
+        processed_groups = [word for word in processed_groups if word]
+
+        all_word_groups.append(processed_groups)
+        truncated_prompt = ' '.join(processed_groups)
+        all_prompts_truncated.append(truncated_prompt)
+
+    # Number of tokens should be > Number of words
+    tokens = tokenizer(all_prompts_truncated, return_tensors="pt", padding=True,
+                       truncation=True, max_length = 4*max_word_len)
+
+    for word_groups_id, word_groups in enumerate(all_word_groups):
+        # for each word, group the tokens of the model into token_group
+        curr_tok_index = 0
+        for word_id, word in enumerate(word_groups):
+            # if word_groups_id == 59:
+            #     print(word_id, word)
+            word_so_far = ''
+            token_group_to_word = []
+            while True:
+                try:
+                    tokId = tokens['input_ids'][word_groups_id][curr_tok_index]
+                except:
+                    pdb.set_trace()
+                decoded_token = tokenizer.decode(tokId)
+                flag = False
+                for junk in junk_words:
+                    if junk in decoded_token:
+                        curr_tok_index += 1
+                        flag = True
+                        break
+                if flag:
+                    continue
+                # if word_groups_id == 59:
+                #     print('TOKEN: ', curr_tok_index, decoded_token)
+                if decoded_token[0] == ' ':
+                    decoded_token = decoded_token.replace(' ', '')
+                word_so_far += decoded_token
+                # if curr_tok_index == 40:
+                #     pdb.set_trace()
+                token_group_to_word.append(tokId)
+                curr_tok_index += 1
+                if word_so_far == word:
+                    # done with word, move on to next word but DON'T RESET next token
+                    all_prompts_tokenGroups.append(token_group_to_word)
+                    break
+    return all_prompts_tokenGroups, tokens
+
+
+# In[41]:
+
+
+all_prompts_tokenGroups_1, inputs_1 = get_all_tokenGroups_for_prompt(filtered_strings, tokenizer_1)
+len(all_prompts_tokenGroups_1)
+
+
+# In[42]:
+
+
+all_prompts_tokenGroups_2, inputs_2 = get_all_tokenGroups_for_prompt(filtered_strings, tokenizer_2)
+len(all_prompts_tokenGroups_2)
+
+
+# In[40]:
+
+
+# inputs_1 = inputs_1.to('cuda')
+# inputs_2 = inputs_2.to('cuda')
+
+
+# ## attempt 2
+
+# In[ ]:
+
+
+def get_all_tokenGroups_for_prompt(samples_as_strings, inputs, tokenizer):
+    all_prompts_tokenGroups = []
+    for sample_id, sample in enumerate(samples_as_strings):
+        input_ids = inputs['input_ids'][sample_id]
+        word_ids = inputs.encodings[sample_id].word_ids
+
+        # Group tokens by their corresponding word IDs
+        token_groups = []
+        current_word_id = None
+        current_token_group = []
+        for token_id, word_id in zip(input_ids, word_ids):
+            if word_id is None:
+                continue  # Skip special tokens if any
+            if word_id != current_word_id:
+                if current_token_group:
+                    token_groups.append(current_token_group)
+                current_token_group = [token_id]
+                current_word_id = word_id
+            else:
+                current_token_group.append(token_id)
+        # Append the last token group
+        if current_token_group:
+            token_groups.append(current_token_group)
+        all_prompts_tokenGroups.append(token_groups)
+    return all_prompts_tokenGroups
+
+
+# In[ ]:
+
+
+# get number of words for each tokenizer
+for sample_id, sample in enumerate(filtered_strings):
+    print(sample_id, inputs_1.encodings[sample_id].word_ids[-1], inputs_2.encodings[sample_id].word_ids[-1])
+
+
+# In[ ]:
+
+
+# Now, for each sample, map word_ids back to words
+for sample_id, words in enumerate(filtered_strings[0:1]):
+    encoding = inputs_1.encodings[sample_id]
+    word_ids = encoding.word_ids
+    input_ids = encoding.ids  # Note: For the specific sample
+
+    # print(f"\nSample {sample_id}: {' '.join(words)}")
+    for idx, word_id in enumerate(word_ids):
+        token = tokenizer_1.convert_ids_to_tokens(input_ids[idx])
+        if word_id is not None:
+            word = words[word_id]
+            print(f"Token: {token} \t Word ID: {word_id} \t Word: {word}")
+        else:
+            # This case occurs if there are special tokens (which we are not using here)
+            print(f"Token: {token} \t Word ID: {word_id} \t Word: [Special Token]")
+
+
+# In[ ]:
+
+
+all_prompts_tokenGroups_1 = get_all_tokenGroups_for_prompt(filtered_strings, inputs_1, tokenizer_1)
+len(all_prompts_tokenGroups_1)
+
+
+# In[ ]:
+
+
+len(all_prompts_tokenGroups_1[0])
+
+
+# In[ ]:
+
+
+def flatten(xss):
+    return [x for xs in xss for x in xs]
+
+
+# In[ ]:
+
+
+all_prompts_tokenGroups_1_flat = flatten(all_prompts_tokenGroups_1)
+len(all_prompts_tokenGroups_1_flat)
+
+
+# In[ ]:
+
+
+all_prompts_tokenGroups_2 = get_all_tokenGroups_for_prompt(filtered_strings, inputs_2, tokenizer_2)
+all_prompts_tokenGroups_2_flat = flatten(all_prompts_tokenGroups_2)
+len(all_prompts_tokenGroups_2_flat)
+
+
+# In[ ]:
+
+
+all_prompts_tokenGroups_1_flat[0]
+
+
+# In[ ]:
+
+
+all_prompts_tokenGroups_2_flat[0]
+
+
+# In[ ]:
+
+
+filtered_strings[0].split(' ')[0]
 
 
 # # load models
 
-# In[ ]:
+# In[43]:
 
 
-model = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-160m")
-model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-410m")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b")
+model_2 = AutoModelForCausalLM.from_pretrained("EleutherAI/pythia-70m-deduped")
+
+
+# In[45]:
+
+
+# device = torch.device("cuda:0")
+# model = model.to(device)
+# model_2 = model_2.to(device)
 
 
 # ## get LLM actvs
 
-# In[ ]:
+# In[44]:
 
 
 with torch.inference_mode():
-    # outputs = model(**inputs, output_hidden_states=True)
-    outputs_2 = model_2(**inputs, output_hidden_states=True)
+    outputs = model(**inputs_1, output_hidden_states=True)
+    outputs_2 = model_2(**inputs_2, output_hidden_states=True)
 
 
-# # MLP 6
+# In[45]:
+
+
+outputs.hidden_states[10].shape
+
 
 # In[ ]:
 
 
-layer_id = 6
-name = "EleutherAI/sae-pythia-160m-32k"
+# layer_id = 10
+# layerID_2 = 3
 
-with torch.inference_mode():
-    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
-
-weight_matrix_np, reshaped_activations_A = get_weights_and_acts(name, layer_id, outputs)
-
-
-# ## vs MLP 12
 
 # In[ ]:
 
 
-layerID_2 = 12
-name = "EleutherAI/sae-pythia-410m-65k"
+# # Define a class to hold the hidden states
+# class HiddenStateExtractor:
+#     def __init__(self):
+#         self.hidden_states = None
 
-dictscores = {}
+#     def hook(self, module, input, output):
+#         self.hidden_states = output
 
-weight_matrix_2, reshaped_activations_B = get_410m_weights_and_acts_byLayer(name, layerID_2, outputs_2)
+# # Create an instance of the extractor
+# extractor = HiddenStateExtractor()
+
+# # Specify the layer you want to hook
+# layer_to_extract = model.model.layers[10]  # Adjust the index to match the desired layer
+# hook = layer_to_extract.register_forward_hook(extractor.hook)
+
+# # Run the model forward pass
+# with torch.inference_mode():
+#     outputs = model(**inputs_1)
+
+# # Access the hidden states from the extractor
+# hidden_states = extractor.hidden_states
+# print(hidden_states.shape)
+
+# # Remove the hook to avoid side effects
+# hook.remove()
 
 
-# ### manyA to oneB
+# # get saes actvs
 
-# In[ ]:
+# In[46]:
 
 
-"""
-`batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
-highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
-Use the list with smaller number of features (cols) as the second arg
-"""
-highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+layer_id = 10
+layerID_2 = 3
 
-# num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
-# print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
 
-dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+# In[47]:
 
-###########
-# filter
 
-sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
-# kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 100]
+sae, _, _ = SAE.from_pretrained(
+        release = "gemma-2b-res-jb",
+        sae_id = f"blocks.{layer_id}.hook_resid_post",
+    )
+weight_matrix_np = sae.W_dec.cpu().detach().numpy()
+sae = sae.to('cuda')
+sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+with torch.no_grad():
+    feature_acts_model_A = sae.encode(outputs.hidden_states[layer_id].to('cuda') )
+first_dim_reshaped = feature_acts_model_A.shape[0] * feature_acts_model_A.shape[1]
+reshaped_activations_A = feature_acts_model_A.reshape(first_dim_reshaped, feature_acts_model_A.shape[-1]).cpu()
+
+
+# In[48]:
+
+
+sae_2, _, _ = SAE.from_pretrained(
+        release = "pythia-70m-deduped-res-sm",
+        sae_id = f"blocks.{layerID_2}.hook_resid_post",
+    )
+weight_matrix_2 = sae_2.W_dec.cpu().detach().numpy()
+sae_2 = sae_2.to('cuda')
+sae_2.eval()  # prevents error if we're expecting a dead neuron mask for who grads
+with torch.no_grad():
+    feature_acts_model_B = sae_2.encode(outputs_2.hidden_states[layerID_2].to('cuda') )
+first_dim_reshaped = feature_acts_model_B.shape[0] * feature_acts_model_B.shape[1]
+reshaped_activations_B = feature_acts_model_B.reshape(first_dim_reshaped, feature_acts_model_B.shape[-1]).cpu()
+
+
+# In[49]:
+
+
+word_dim_output_sae = torch.zeros(len(all_prompts_tokenGroups_1), reshaped_activations_A.shape[-1])
+orig_actvs_index = 0
+word_actvs_index = 0
+
+for token_group_to_word in all_prompts_tokenGroups_1:
+    word_actvs = reshaped_activations_A[orig_actvs_index: orig_actvs_index + len(token_group_to_word)]
+    word_dim_output_sae[word_actvs_index] = word_actvs.mean(dim=0)
+    orig_actvs_index += len(token_group_to_word)
+    word_actvs_index += 1
+
+
+# In[52]:
+
+
+word_dim_output_sae_2 = torch.zeros(len(all_prompts_tokenGroups_1), reshaped_activations_B.shape[-1])
+orig_actvs_index = 0
+word_actvs_index = 0
+
+for token_group_to_word in all_prompts_tokenGroups_2:
+    word_actvs = reshaped_activations_B[orig_actvs_index: orig_actvs_index + len(token_group_to_word)]
+    word_dim_output_sae_2[word_actvs_index] = word_actvs.mean(dim=0)
+    orig_actvs_index += len(token_group_to_word)
+    word_actvs_index += 1
+
+
+# In[51]:
+
+
+word_dim_output_sae.shape
+
+
+# In[50]:
+
+
+reshaped_activations_A.shape
+
+
+# In[53]:
+
+
+word_dim_output_sae_2.shape
+
+
+# # get corrs
+
+# ## same matrix corrs
+
+# In[54]:
+
+
+max_corr_inds_smae, max_corr_vals_smae = batched_correlation(word_dim_output_sae, word_dim_output_sae)
+
+
+# In[55]:
+
+
+word_dim_output_sae
+
+
+# In[56]:
+
+
+plt.hist(max_corr_vals_smae)
+plt.show()
+
+
+# In[57]:
+
+
+sum(max_corr_vals_smae) / len(max_corr_vals_smae)
+
+
+# ## cross model corr
+
+# In[58]:
+
+
+max_corr_inds, max_corr_vals = batched_correlation(word_dim_output_sae, word_dim_output_sae_2)
+
+
+# In[61]:
+
+
+word_dim_output_sae.shape
+
+
+# In[62]:
+
+
+word_dim_output_sae_2.shape
+
+
+# In[60]:
+
+
+len(max_corr_inds)
+
+
+# In[63]:
+
+
+len(set(max_corr_inds))
+
+
+# In[64]:
+
+
+sum(max_corr_vals) / len(max_corr_vals)
+
+
+# In[65]:
+
+
+plt.hist(max_corr_vals)
+plt.show()
+
+
+# In[66]:
+
+
+svcca(weight_matrix_np[max_corr_inds], weight_matrix_2, "nd")
+
+
+# In[67]:
+
+
+sorted_feat_counts = Counter(max_corr_inds).most_common()
 kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
 
-filt_corr_ind_A = []
-filt_corr_ind_B = []
+oneToOne_A = []
+oneToOne_B = []
 seen = set()
-for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+for ind_B, ind_A in enumerate(max_corr_inds):
     if ind_A in kept_modA_feats:
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
     elif ind_A not in seen:  # only keep one if it's over count X
         seen.add(ind_A)
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
-# num_unq_pairs = len(list(set(filt_corr_ind_A)))
-# print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
-# print("num feats after filt: ", len(filt_corr_ind_A))
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
+num_unq_pairs = len(list(set(oneToOne_A)))
+print("% unique: ", num_unq_pairs / len(oneToOne_A))
+print("num feats after 1-1: ", len(oneToOne_A))
 
-new_highest_correlations_indices_A = []
-new_highest_correlations_indices_B = []
-new_highest_correlations_values = []
 
-for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
-    val = highest_correlations_values_AB[ind_B]
-    if val > 0:
-        new_highest_correlations_indices_A.append(ind_A)
-        new_highest_correlations_indices_B.append(ind_B)
-        new_highest_correlations_values.append(val)
+# In[68]:
 
-num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
-print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
-print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
 
-dictscores["num_feat_kept"] = len(new_highest_correlations_indices_A)
-print(dictscores["num_feat_kept"])
-
-dictscores["mean_actv_corr_filt"] = sum(new_highest_correlations_values) / len(new_highest_correlations_values)
-print(dictscores["mean_actv_corr_filt"])
+# paired right
+svcca(weight_matrix_np[oneToOne_A], weight_matrix_2[oneToOne_B], "nd")
 
 
 # In[ ]:
 
 
-###########
-# sim tests
+num_runs = 1
+num_feats = len(oneToOne_A)
+rand_scores = shuffle_rand(num_runs, weight_matrix_np[oneToOne_A],
+                                    weight_matrix_2[oneToOne_B], num_feats,
+                                    svcca, shapereq_bool=True)
+# dictscores["svcca_rand_mean"] =
+sum(rand_scores) / len(rand_scores)
 
-num_feats = len(new_highest_correlations_indices_A)
-num_runs = 3
 
-dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+# ## swithc corr args order
 
-rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                            weight_matrix_2[new_highest_correlations_indices_B], num_feats,
-                            svcca, shapereq_bool=True)
-dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
-dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
+# In[70]:
 
-dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                                            weight_matrix_2[new_highest_correlations_indices_B], num_feats,
-                                            representational_similarity_analysis, shapereq_bool=True)
-dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
-dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
 
-print("Layer: " + str(layerID_2))
-for key, value in dictscores.items():
-    print(key + ": " + str(value))
-print("\n")
+max_corr_inds, max_corr_vals = batched_correlation(word_dim_output_sae_2, word_dim_output_sae)
 
 
-# ### oneA to manyB
+# In[71]:
 
-# In[ ]:
 
+word_dim_output_sae.shape
 
-"""
-`batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
-highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
-Use the list with smaller number of features (cols) as the second arg
-"""
-highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_B, reshaped_activations_A)
 
-# num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
-# print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
+# In[73]:
 
-dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
 
-###########
-# filter
+word_dim_output_sae_2.shape
 
-sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
-# kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 100]
-kept_modB_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
 
-filt_corr_ind_A = []
-filt_corr_ind_B = []
-seen = set()
-for ind_A, ind_B in enumerate(highest_correlations_indices_AB):
-    if ind_B in kept_modB_feats:
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
-    elif ind_B not in seen:  # only keep one if it's over count X
-        seen.add(ind_A)
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
-# num_unq_pairs = len(list(set(filt_corr_ind_A)))
-# print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
-# print("num feats after filt: ", len(filt_corr_ind_A))
+# In[72]:
 
-new_highest_correlations_indices_A = []
-new_highest_correlations_indices_B = []
-new_highest_correlations_values = []
 
-for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
-    val = highest_correlations_values_AB[ind_A]
-    if val > 0:
-        new_highest_correlations_indices_A.append(ind_A)
-        new_highest_correlations_indices_B.append(ind_B)
-        new_highest_correlations_values.append(val)
+len(max_corr_inds)
 
-num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
-print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
-print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
 
-dictscores["num_feat_kept"] = len(new_highest_correlations_indices_A)
-print(dictscores["num_feat_kept"])
+# In[74]:
 
-dictscores["mean_actv_corr_filt"] = sum(new_highest_correlations_values) / len(new_highest_correlations_values)
-print(dictscores["mean_actv_corr_filt"])
 
+len(set(max_corr_inds))
 
-# In[ ]:
 
+# In[75]:
 
-num_feats = len(new_highest_correlations_indices_A)
-num_runs = 3
 
-dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
+sum(max_corr_vals) / len(max_corr_vals)
 
-rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                            weight_matrix_2[new_highest_correlations_indices_B], num_feats,
-                            svcca, shapereq_bool=True)
-dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
-dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
 
-print("Layer: " + str(layerID_2))
-for key, value in dictscores.items():
-    print(key + ": " + str(value))
-print("\n")
+# In[76]:
 
 
-# ## vs MLP 18
+plt.hist(max_corr_vals)
+plt.show()
 
-# In[ ]:
 
+# In[78]:
 
-layerID_2 = 18
-name = "EleutherAI/sae-pythia-410m-65k"
 
-dictscores = {}
+svcca(weight_matrix_np, weight_matrix_2[max_corr_inds], "nd")
 
-weight_matrix_2, reshaped_activations_B = get_410m_weights_and_acts_byLayer(name, layerID_2, outputs_2)
 
+# In[87]:
 
-# ### manyA to oneB
 
-# In[ ]:
+num_runs = 1
+num_feats = len(max_corr_inds)
+rand_scores = shuffle_rand(num_runs, weight_matrix_np,
+                                    weight_matrix_2, num_feats,
+                                    svcca, shapereq_bool=True)
+# dictscores["svcca_rand_mean"] =
+sum(rand_scores) / len(rand_scores)
 
 
-"""
-`batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
-highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
-Use the list with smaller number of features (cols) as the second arg
-"""
-highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_A, reshaped_activations_B)
+# In[84]:
 
-# num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
-# print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
 
-dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
-
-
-# In[ ]:
-
-
-len(highest_correlations_indices_AB)
-
-
-# In[ ]:
-
-
-weight_matrix_2.shape
-
-
-# In[ ]:
-
-
-dictscores["svcca_paired_manyto1"] = svcca(weight_matrix_np,
-                                           weight_matrix_2[highest_correlations_indices_AB][:weight_matrix_np.shape[0]], "nd")
-
-
-# In[ ]:
-
-
-dictscores["svcca_paired_manyto1"]
-
-
-# In[ ]:
-
-
-num_feats = len(list(set(highest_correlations_indices_AB)))
-rand_scores = shuffle_rand(1, weight_matrix_np,
-                            weight_matrix_2, num_feats,
-                            svcca, shapereq_bool=True)
-dictscores["svcca_rand_mean_manyto1"] = sum(rand_scores) / len(rand_scores)
-dictscores["svcca_rand_pval_manyto1"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired_manyto1"])
-
-
-# In[ ]:
-
-
-print("Layer: " + str(layerID_2))
-for key, value in dictscores.items():
-    print(key + ": " + str(value))
-print("\n")
-
-
-# In[ ]:
-
-
-###########
-# filter
-
-sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
-# kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 100]
+sorted_feat_counts = Counter(max_corr_inds).most_common()
 kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
 
-filt_corr_ind_A = []
-filt_corr_ind_B = []
+oneToOne_A = []
+oneToOne_B = []
 seen = set()
-for ind_B, ind_A in enumerate(highest_correlations_indices_AB):
+for ind_A, ind_B in enumerate(max_corr_inds):
+    if ind_B in kept_modA_feats:
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
+    elif ind_B not in seen:  # only keep one if it's over count X
+        seen.add(ind_B)
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
+num_unq_pairs = len(list(set(oneToOne_A)))
+print("% unique: ", num_unq_pairs / len(oneToOne_A))
+print("num feats after 1-1: ", len(oneToOne_A))
+
+
+# In[85]:
+
+
+# paired right
+svcca(weight_matrix_np[oneToOne_A], weight_matrix_2[oneToOne_B], "nd")
+
+
+# In[86]:
+
+
+num_runs = 1
+num_feats = len(oneToOne_A)
+rand_scores = shuffle_rand(num_runs, weight_matrix_np[oneToOne_A],
+                                    weight_matrix_2[oneToOne_B], num_feats,
+                                    svcca, shapereq_bool=True)
+# dictscores["svcca_rand_mean"] =
+sum(rand_scores) / len(rand_scores)
+
+
+# # sum actvs for tokens in each word, not mean
+
+# In[88]:
+
+
+word_dim_output_sae = torch.zeros(len(all_prompts_tokenGroups_1), reshaped_activations_A.shape[-1])
+orig_actvs_index = 0
+word_actvs_index = 0
+
+for token_group_to_word in all_prompts_tokenGroups_1:
+    word_actvs = reshaped_activations_A[orig_actvs_index: orig_actvs_index + len(token_group_to_word)]
+    word_dim_output_sae[word_actvs_index] = word_actvs.sum(dim=0)
+    orig_actvs_index += len(token_group_to_word)
+    word_actvs_index += 1
+
+
+# In[89]:
+
+
+word_dim_output_sae_2 = torch.zeros(len(all_prompts_tokenGroups_1), reshaped_activations_B.shape[-1])
+orig_actvs_index = 0
+word_actvs_index = 0
+
+for token_group_to_word in all_prompts_tokenGroups_2:
+    word_actvs = reshaped_activations_B[orig_actvs_index: orig_actvs_index + len(token_group_to_word)]
+    word_dim_output_sae_2[word_actvs_index] = word_actvs.sum(dim=0)
+    orig_actvs_index += len(token_group_to_word)
+    word_actvs_index += 1
+
+
+# ## same matrix corrs
+
+# In[90]:
+
+
+max_corr_inds_smae, max_corr_vals_smae = batched_correlation(word_dim_output_sae, word_dim_output_sae)
+
+
+# In[91]:
+
+
+word_dim_output_sae
+
+
+# In[92]:
+
+
+plt.hist(max_corr_vals_smae)
+plt.show()
+
+
+# In[93]:
+
+
+sum(max_corr_vals_smae) / len(max_corr_vals_smae)
+
+
+# ## cross model corr
+
+# In[94]:
+
+
+max_corr_inds, max_corr_vals = batched_correlation(word_dim_output_sae, word_dim_output_sae_2)
+
+
+# In[95]:
+
+
+word_dim_output_sae.shape
+
+
+# In[96]:
+
+
+word_dim_output_sae_2.shape
+
+
+# In[97]:
+
+
+len(max_corr_inds)
+
+
+# In[98]:
+
+
+len(set(max_corr_inds))
+
+
+# In[99]:
+
+
+sum(max_corr_vals) / len(max_corr_vals)
+
+
+# In[100]:
+
+
+plt.hist(max_corr_vals)
+plt.show()
+
+
+# In[101]:
+
+
+svcca(weight_matrix_np[max_corr_inds], weight_matrix_2, "nd")
+
+
+# In[102]:
+
+
+sorted_feat_counts = Counter(max_corr_inds).most_common()
+kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+
+oneToOne_A = []
+oneToOne_B = []
+seen = set()
+for ind_B, ind_A in enumerate(max_corr_inds):
     if ind_A in kept_modA_feats:
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
     elif ind_A not in seen:  # only keep one if it's over count X
         seen.add(ind_A)
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
-# num_unq_pairs = len(list(set(filt_corr_ind_A)))
-# print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
-# print("num feats after filt: ", len(filt_corr_ind_A))
-
-new_highest_correlations_indices_A = []
-new_highest_correlations_indices_B = []
-new_highest_correlations_values = []
-
-for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
-    val = highest_correlations_values_AB[ind_B]
-    if val > 0:
-        new_highest_correlations_indices_A.append(ind_A)
-        new_highest_correlations_indices_B.append(ind_B)
-        new_highest_correlations_values.append(val)
-
-num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
-print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
-print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
-
-dictscores["num_feat_kept"] = len(new_highest_correlations_indices_A)
-print(dictscores["num_feat_kept"])
-
-dictscores["mean_actv_corr_filt"] = sum(new_highest_correlations_values) / len(new_highest_correlations_values)
-print(dictscores["mean_actv_corr_filt"])
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
+num_unq_pairs = len(list(set(oneToOne_A)))
+print("% unique: ", num_unq_pairs / len(oneToOne_A))
+print("num feats after 1-1: ", len(oneToOne_A))
 
 
-# In[ ]:
+# In[103]:
 
 
-###########
-# sim tests
-
-num_feats = len(new_highest_correlations_indices_A)
-num_runs = 2
-
-dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-
-rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                            weight_matrix_2[new_highest_correlations_indices_B], num_feats,
-                            svcca, shapereq_bool=True)
-dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
-dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
-
-# dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-# rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-#                                             weight_matrix_2[new_highest_correlations_indices_B], num_feats,
-#                                             representational_similarity_analysis, shapereq_bool=True)
-# dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
-# dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
-
-print("Layer: " + str(layerID_2))
-for key, value in dictscores.items():
-    print(key + ": " + str(value))
-print("\n")
+# paired right
+svcca(weight_matrix_np[oneToOne_A], weight_matrix_2[oneToOne_B], "nd")
 
 
-# ### oneA to manyB
-
-# In[ ]:
+# In[104]:
 
 
-"""
-`batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
-highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
-Use the list with smaller number of features (cols) as the second arg
-"""
-highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_B, reshaped_activations_A)
+num_runs = 1
+num_feats = len(oneToOne_A)
+rand_scores = shuffle_rand(num_runs, weight_matrix_np[oneToOne_A],
+                                    weight_matrix_2[oneToOne_B], num_feats,
+                                    svcca, shapereq_bool=True)
+# dictscores["svcca_rand_mean"] =
+sum(rand_scores) / len(rand_scores)
 
-# num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
-# print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
 
-dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
+# ## swithc corr args order
 
-###########
-# filter
+# In[105]:
 
-sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
-# kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 100]
-kept_modB_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
 
-filt_corr_ind_A = []
-filt_corr_ind_B = []
+max_corr_inds, max_corr_vals = batched_correlation(word_dim_output_sae_2, word_dim_output_sae)
+
+
+# In[106]:
+
+
+word_dim_output_sae.shape
+
+
+# In[107]:
+
+
+word_dim_output_sae_2.shape
+
+
+# In[108]:
+
+
+len(max_corr_inds)
+
+
+# In[109]:
+
+
+len(set(max_corr_inds))
+
+
+# In[110]:
+
+
+sum(max_corr_vals) / len(max_corr_vals)
+
+
+# In[111]:
+
+
+plt.hist(max_corr_vals)
+plt.show()
+
+
+# In[112]:
+
+
+svcca(weight_matrix_np, weight_matrix_2[max_corr_inds], "nd")
+
+
+# In[113]:
+
+
+num_runs = 1
+num_feats = len(max_corr_inds)
+rand_scores = shuffle_rand(num_runs, weight_matrix_np,
+                                    weight_matrix_2, num_feats,
+                                    svcca, shapereq_bool=True)
+# dictscores["svcca_rand_mean"] =
+sum(rand_scores) / len(rand_scores)
+
+
+# In[114]:
+
+
+sorted_feat_counts = Counter(max_corr_inds).most_common()
+kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
+
+oneToOne_A = []
+oneToOne_B = []
 seen = set()
-for ind_A, ind_B in enumerate(highest_correlations_indices_AB):
-    if ind_B in kept_modB_feats:
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
+for ind_A, ind_B in enumerate(max_corr_inds):
+    if ind_B in kept_modA_feats:
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
     elif ind_B not in seen:  # only keep one if it's over count X
-        seen.add(ind_A)
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
-# num_unq_pairs = len(list(set(filt_corr_ind_A)))
-# print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
-# print("num feats after filt: ", len(filt_corr_ind_A))
+        seen.add(ind_B)
+        oneToOne_A.append(ind_A)
+        oneToOne_B.append(ind_B)
+num_unq_pairs = len(list(set(oneToOne_A)))
+print("% unique: ", num_unq_pairs / len(oneToOne_A))
+print("num feats after 1-1: ", len(oneToOne_A))
 
-new_highest_correlations_indices_A = []
-new_highest_correlations_indices_B = []
-new_highest_correlations_values = []
 
-for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
-    val = highest_correlations_values_AB[ind_A]
-    if val > 0:
-        new_highest_correlations_indices_A.append(ind_A)
-        new_highest_correlations_indices_B.append(ind_B)
-        new_highest_correlations_values.append(val)
+# In[115]:
 
-num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
-print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
-print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
 
-dictscores["num_feat_kept"] = len(new_highest_correlations_indices_A)
-print(dictscores["num_feat_kept"])
+# paired right
+svcca(weight_matrix_np[oneToOne_A], weight_matrix_2[oneToOne_B], "nd")
 
-dictscores["mean_actv_corr_filt"] = sum(new_highest_correlations_values) / len(new_highest_correlations_values)
-print(dictscores["mean_actv_corr_filt"])
 
+# In[116]:
 
-# In[ ]:
 
-
-num_feats = len(new_highest_correlations_indices_A)
-num_runs = 2
-
-dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-
-rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                            weight_matrix_2[new_highest_correlations_indices_B], num_feats,
-                            svcca, shapereq_bool=True)
-dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
-dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
-
-print("Layer: " + str(layerID_2))
-for key, value in dictscores.items():
-    print(key + ": " + str(value))
-print("\n")
-
-
-# ## vs MLP 6
-
-# In[ ]:
-
-
-layerID_2 = 6
-name = "EleutherAI/sae-pythia-410m-65k"
-
-dictscores = {}
-
-weight_matrix_2, reshaped_activations_B = get_410m_weights_and_acts_byLayer(name, layerID_2, outputs_2)
-
-
-# ### oneA to manyB
-
-# In[ ]:
-
-
-"""
-`batched_correlation(reshaped_activations_B, reshaped_activations_A)`:
-highest_correlations_indices_AB contains modA's feats as inds, and modB's feats as vals.
-Use the list with smaller number of features (cols) as the second arg
-"""
-highest_correlations_indices_AB, highest_correlations_values_AB = batched_correlation(reshaped_activations_B, reshaped_activations_A)
-
-# num_unq_pairs = len(list(set(highest_correlations_indices_AB)))
-# print("% unique: ", num_unq_pairs / len(highest_correlations_indices_AB))
-
-dictscores["mean_actv_corr"] = sum(highest_correlations_values_AB) / len(highest_correlations_values_AB)
-
-###########
-# filter
-
-sorted_feat_counts = Counter(highest_correlations_indices_AB).most_common()
-# kept_modA_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count <= 100]
-kept_modB_feats = [feat_ID for feat_ID, count in sorted_feat_counts if count == 1]
-
-filt_corr_ind_A = []
-filt_corr_ind_B = []
-seen = set()
-for ind_A, ind_B in enumerate(highest_correlations_indices_AB):
-    if ind_B in kept_modB_feats:
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
-    elif ind_B not in seen:  # only keep one if it's over count X
-        seen.add(ind_A)
-        filt_corr_ind_A.append(ind_A)
-        filt_corr_ind_B.append(ind_B)
-# num_unq_pairs = len(list(set(filt_corr_ind_A)))
-# print("% unique: ", num_unq_pairs / len(filt_corr_ind_A))
-# print("num feats after filt: ", len(filt_corr_ind_A))
-
-new_highest_correlations_indices_A = []
-new_highest_correlations_indices_B = []
-new_highest_correlations_values = []
-
-for ind_A, ind_B in zip(filt_corr_ind_A, filt_corr_ind_B):
-    val = highest_correlations_values_AB[ind_A]
-    if val > 0:
-        new_highest_correlations_indices_A.append(ind_A)
-        new_highest_correlations_indices_B.append(ind_B)
-        new_highest_correlations_values.append(val)
-
-num_unq_pairs = len(list(set(new_highest_correlations_indices_A)))
-print("% unique after rmv 0s: ", num_unq_pairs / len(new_highest_correlations_indices_A))
-print("num feats after rmv 0s: ", len(new_highest_correlations_indices_A))
-
-dictscores["num_feat_kept"] = len(new_highest_correlations_indices_A)
-print(dictscores["num_feat_kept"])
-
-dictscores["mean_actv_corr_filt"] = sum(new_highest_correlations_values) / len(new_highest_correlations_values)
-print(dictscores["mean_actv_corr_filt"])
-
-
-# In[ ]:
-
-
-num_feats = len(new_highest_correlations_indices_A)
-num_runs = 2
-
-dictscores["svcca_paired"] = svcca(weight_matrix_np[new_highest_correlations_indices_A], weight_matrix_2[new_highest_correlations_indices_B], "nd")
-
-rand_scores = shuffle_rand(num_runs, weight_matrix_np[new_highest_correlations_indices_A],
-                            weight_matrix_2[new_highest_correlations_indices_B], num_feats,
-                            svcca, shapereq_bool=True)
-dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
-dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
-
-print("Layer: " + str(layerID_2))
-for key, value in dictscores.items():
-    print(key + ": " + str(value))
-print("\n")
-
-
-# # loop- 1-1
-
-# In[ ]:
-
-
-layer_id = 6
-
-with torch.inference_mode():
-    outputs = get_llm_actvs_batch(model, inputs, layer_id, batch_size=100, maxseqlen=300)
-
-
-# In[ ]:
-
-
-layer_start = 0
-layer_end = len(model_2.gpt_neox.layers)
-layer_to_dictscores = run_expm(layer_id, outputs, outputs_2, layer_start, layer_end)
-
-
-# In[ ]:
-
-
-layer_to_dictscores
-
-
-# In[ ]:
-
-
-del outputs, outputs_2
-
-
-# ### plot
-
-# In[ ]:
-
-
-plot_svcca_byLayer(layer_to_dictscores)
-
-
-# In[ ]:
-
-
-plot_rsa_byLayer(layer_to_dictscores)
-
-
-# In[ ]:
-
-
-plot_meanCorr_filt_byLayer(layer_to_dictscores)
-
-
-# In[ ]:
-
-
-plot_meanCorr_byLayer(layer_to_dictscores)
-
-
-# In[ ]:
-
-
-for key, val in layer_to_dictscores.items():
-    print(key, val['num_feat_kept'])
+num_runs = 1
+num_feats = len(oneToOne_A)
+rand_scores = shuffle_rand(num_runs, weight_matrix_np[oneToOne_A],
+                                    weight_matrix_2[oneToOne_B], num_feats,
+                                    svcca, shapereq_bool=True)
+# dictscores["svcca_rand_mean"] =
+sum(rand_scores) / len(rand_scores)
 
