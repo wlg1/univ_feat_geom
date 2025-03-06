@@ -22,9 +22,8 @@ This repository provides the code and resources for our research paper, **Sparse
 Clone the repository and install dependencies:
 
 ```bash```
-git clone https://github.com/yourusername/SAE_feature_univ.git \
-cd SAE_feature_univ \
 pip install -r requirements.txt
+sae-lens @ git+https://github.com/sae-lens/sae-lens.git@main
 
 
 ### Usage
