@@ -151,7 +151,7 @@ def main():
         sae_name = "google/gemma-scope-2b-pt-res-canonical"
         sae_lib = 'sae_lens'
     saeActvs_by_layer_1 = {}
-    for layer_id in range(1, model_A_endLayer, layer_step_size): # step = layer_step_size
+    for layer_id in range(model_A_startLayer, model_A_endLayer, layer_step_size): # step = layer_step_size
         print("Model A Layer: " + str(layer_id))
         with torch.inference_mode():
             weight_matrix, reshaped_activations, feature_acts_model = get_sae_actvs(model, sae_name, inputs, 
@@ -160,8 +160,8 @@ def main():
             saeActvs_by_layer_1[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
     # save_file(saeActvs_by_layer_1, "saeActvs_by_layer_1.safetensors")
-    # with open(f'saeActvs_by_layer_1.pkl', 'wb') as f:
-    #     pickle.dump(saeActvs_by_layer_1, f)
+    with open(f'saeActvs_by_layer_1.pkl', 'wb') as f:
+        pickle.dump(saeActvs_by_layer_1, f)
 
     if 'EleutherAI' in model_name_2:
         sae_name_2 = "EleutherAI/sae-pythia-160m-32k"
@@ -170,7 +170,7 @@ def main():
         sae_name_2 = "google/gemma-scope-9b-pt-res-canonical"
         sae_lib = 'sae_lens'
     saeActvs_by_layer_2 = {}
-    for layer_id in range(1, model_B_endLayer, layer_step_size): # step = layer_step_size
+    for layer_id in range(model_B_startLayer, model_B_endLayer, layer_step_size): # step = layer_step_size
         print("Model B Layer: " + str(layer_id))
         with torch.inference_mode():
             weight_matrix, reshaped_activations, feature_acts_model = get_sae_actvs(model_2, sae_name_2, inputs, 
@@ -179,8 +179,8 @@ def main():
             saeActvs_by_layer_2[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
     # save_file(saeActvs_by_layer_2, "saeActvs_by_layer_2.safetensors")
-    # with open(f'saeActvs_by_layer_2.pkl', 'wb') as f:
-    #     pickle.dump(saeActvs_by_layer_2, f)
+    with open(f'saeActvs_by_layer_2.pkl', 'wb') as f:
+        pickle.dump(saeActvs_by_layer_2, f)
 
     ### run
     print("Running experiment")

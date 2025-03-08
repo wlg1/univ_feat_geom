@@ -7,16 +7,6 @@ This repository provides the code and resources for our research paper, **Sparse
 - **Similarity Analysis**: Methods for analyzing representational similarity with metrics such as Singular Value Canonical Correlation Analysis (SVCCA).
 - **Visualization**: Scripts for generating heatmaps
 
-## Usage
-
-In `run_pipeline/`, run:
-
-`chmod +x run_pythia.sh`
-
-`./run_pythia.sh --batch_size 300 --max_length 300 --num_rand_runs 1 --oneToOne_bool --model_A_endLayer 6 --model_B_endLayer 12 --layer_step_size 2`
-
-(TBD- update .sh to do this) to eval separate model pairs in one run:
-
 ## Repository Structure
 - `run_pipeline/`: Run the main results
 - `main_results_nbs/`: Jupyter notebooks with code for experiments and analyses.
@@ -42,7 +32,17 @@ If running Gemma models, login to HF using:
 
 `huggingface-cli login`
 
-Recommended Hardware Requirements: Allocate at least 100 GB of disk space when renting an A100 on Vast.ai
+Recommended Hardware Requirements: Allocate at least 100 GB of disk space when renting an A100 on Vast.ai (To work with large models like gemma-2-9b)
+
+## Usage
+
+In `run_pipeline/`, run:
+
+`chmod +x run_pythia.sh`
+
+`./run_pythia.sh --batch_size 300 --max_length 300 --num_rand_runs 1 --oneToOne_bool --model_A_endLayer 6 --model_B_endLayer 12 --layer_step_size 2`
+
+(TBD- update .sh to do this) to eval separate model pairs in one run:
 
 ## Citations
 If you use this code or our findings in your research, please cite our paper:
