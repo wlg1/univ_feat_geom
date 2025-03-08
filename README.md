@@ -1,6 +1,5 @@
 # SPARSE AUTOENCODERS REVEAL UNIVERSAL FEATURE SPACES ACROSS LARGE LANGUAGE MODELS
 
-
 ## Overview
 This repository provides the code and resources for our research paper, **Sparse Autoencoders Reveal Universal Feature Spaces Across Large Language Models**. In this study, we investigate how different large language models (LLMs) represent concepts in their latent spaces and identify shared features across models, addressing challenges like polysemanticity. By employing sparse autoencoders (SAEs), we transform model activations into interpretable spaces, revealing universal features that enhance understanding of model interpretability, AI safety, and cross-model generalization.
 
@@ -21,10 +20,11 @@ This repository provides the code and resources for our research paper, **Sparse
 ### Installation
 Clone the repository and install dependencies:
 
-```bash```
 pip install -r requirements.txt
+
 sae-lens @ git+https://github.com/sae-lens/sae-lens.git@main
 
+pip install git+https://github.com/EleutherAI/sae.git
 
 ### Usage
 Feature Matching and Analysis: Follow the steps in the notebooks to align features across models and perform similarity analysis.
@@ -41,3 +41,5 @@ If you use this code or our findings in your research, please cite our paper:
   year={2024}
 }
 
+## TO DO
+This repo is currently being restructured
