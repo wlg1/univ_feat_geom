@@ -147,8 +147,8 @@ def main():
         sae_name = "EleutherAI/sae-pythia-70m-32k"
         sae_lib = 'eleuther'
     elif 'google' in model_name_1:
-        # gemma 1: "google/gemma-2b-res-jb"
-        sae_name = "google/gemma-scope-2b-pt-res-canonical"
+        # gemma 1: "gemma-2b-res-jb"
+        sae_name = "gemma-scope-2b-pt-res-canonical"
         sae_lib = 'sae_lens'
     saeActvs_by_layer_1 = {}
     for layer_id in range(model_A_startLayer, model_A_endLayer, layer_step_size): # step = layer_step_size
@@ -167,7 +167,7 @@ def main():
         sae_name_2 = "EleutherAI/sae-pythia-160m-32k"
         sae_lib = 'eleuther'
     elif 'google' in model_name_2:
-        sae_name_2 = "google/gemma-scope-9b-pt-res-canonical"
+        sae_name_2 = "gemma-scope-9b-pt-res-canonical"
         sae_lib = 'sae_lens'
     saeActvs_by_layer_2 = {}
     for layer_id in range(model_B_startLayer, model_B_endLayer, layer_step_size): # step = layer_step_size
