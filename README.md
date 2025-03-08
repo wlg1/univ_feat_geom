@@ -34,9 +34,13 @@ Clone the repository and install dependencies:
 
 Install these SAE libraries:
 
-pip install git+https://github.com/sae-lens/sae-lens.git
+`pip install sae_lens`
 
-pip install git+https://github.com/EleutherAI/sparisfy.git
+`pip install git+https://github.com/EleutherAI/sae.git`
+
+If running Gemma models, login to HF using:
+
+`huggingface-cli login`
 
 ## Citations
 If you use this code or our findings in your research, please cite our paper:

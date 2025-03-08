@@ -8,7 +8,7 @@ from get_actv_fns import *
 from plot_fns import *
 
 def run_expm(inputs, tokenizer, layer_id, saeActvs_1, saeActvs_2, num_rand_runs=100, oneToOne_bool=False):
-    junk_words = ['.', '\\n', '\n', '', ' ', '-', ',', '!', '?', '<|endoftext|>' , '<bos>', '|bos|']
+    junk_words = ['.', '\\n', '\n', '', ' ', '-', ',', '!', '?', '<|endoftext|>' , '<bos>', '|bos|', '<pad>']
     dictscores = {}
 
     weight_matrix_1, reshaped_activations_A, feature_acts_model_A = saeActvs_1

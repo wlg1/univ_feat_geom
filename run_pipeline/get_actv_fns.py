@@ -8,7 +8,10 @@ from sparsify.config import SaeConfig
 from sparsify.utils import decoder_impl
 from sparsify import Sae
 
-def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32):
+from sae_lens import SAE
+
+def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32, 
+                  sae_lib='eleuther'): # , sae_id=None
     """
     Process the sae activations in batches to avoid OOM errors.
     
@@ -25,50 +28,73 @@ def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32):
     """    
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    LLM_outputs = None
+    LLM_actvs = None
     dataset = TensorDataset(inputs['input_ids'], inputs['attention_mask'])
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    for batch in loader:
-        input_ids, attention_mask = batch
+    for batch_data in loader:
+        input_ids, attention_mask = batch_data
 
         batch_inputs = {'input_ids': input_ids.to(model.device), 'attention_mask': attention_mask.to(model.device)}
         with torch.no_grad():
             outputs = model(**batch_inputs, output_hidden_states=True)
-            if LLM_outputs is None:
-                LLM_outputs = outputs.hidden_states[layer_id]
+            if LLM_actvs is None:
+                LLM_actvs = outputs.hidden_states[layer_id]
             else:
-                LLM_outputs = torch.cat((LLM_outputs, outputs.hidden_states[layer_id]), dim= 0)
+                LLM_actvs = torch.cat((LLM_actvs, outputs.hidden_states[layer_id]), dim= 0)
 
         del batch_inputs, outputs
         torch.cuda.empty_cache()
         gc.collect()
 
     ### Get SAE actvs ###
-    hookpoint = "layers." + str(layer_id)
     
-    # Load the sae model on the appropriate device.
-    sae = Sae.load_from_hub(sae_name, hookpoint=hookpoint, device=device)
+    # Load SAE
+    if sae_lib == 'eleuther':
+        hookpoint = "layers." + str(layer_id)
+        sae = Sae.load_from_hub(sae_name, hookpoint=hookpoint, device=device)
+    elif sae_lib == 'sae_lens':
+        """
+        release = "gemma-2b-res-jb",
+        sae_id = f"blocks.{layer_id}.hook_resid_post",
+
+        release = "gemma-scope-2b-pt-res-canonical",
+        sae_id = f"layer_{layer_id}/width_16k/canonical",
+        """
+        if 'scope' in sae_name:
+            sae_id = f"layer_{layer_id}/width_16k/canonical" # gemma-2
+        else:
+            sae_id = f"blocks.{layer_id}.hook_resid_post" # gemma-1
+
+        sae, _, _ = SAE.from_pretrained(
+            release = sae_name, # "gemma-2b-res-jb"
+            sae_id = sae_id,
+        )
+        sae = sae.to('cuda')
+        sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
     weight_matrix_np = sae.W_dec.cpu().detach().numpy()
     
     # Init vars to store the hidden states for the given layer.
-    num_samples = LLM_outputs.size(0)
+    num_samples = LLM_actvs.size(0)
     pre_act_batches = []
     
     # Process the activations in batches.
     for start in range(0, num_samples, batch_size):
         end = start + batch_size
-        batch = LLM_outputs[start:end].to(device)
+        LLM_actvs_batch = LLM_actvs[start:end].to(device)
         with torch.inference_mode():
-            batch_pre_acts = sae.pre_acts(batch)
+            if sae_lib == 'eleuther':
+                batch_pre_acts = sae.pre_acts(LLM_actvs_batch)
+            elif sae_lib == 'sae_lens':                
+                batch_pre_acts = sae.encode(LLM_actvs_batch)
         pre_act_batches.append(batch_pre_acts.cpu())
         
         # Free up GPU memory.
-        del batch, batch_pre_acts
+        del LLM_actvs_batch, batch_pre_acts
         torch.cuda.empty_cache()
         gc.collect()
     
-    del LLM_outputs
+    del LLM_actvs
     torch.cuda.empty_cache()
     gc.collect()
 
