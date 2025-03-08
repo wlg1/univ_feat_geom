@@ -17,6 +17,13 @@ Optional command line arguments:
 
 `python run.py --batch_size 400 --max_length 400 --num_rand_runs 1 --oneToOne_bool --model_A_endLayer 6 --model_B_endLayer 12 --layer_step_size 2`
 
+Can also run the bash script:
+`chmod +x run_pythia.sh`
+
+`./run_pythia.sh --batch_size 100 --max_length 100 --num_rand_runs 1 --oneToOne_bool --model_A_endLayer 4 --model_B_endLayer 4 --layer_step_size 2`
+
+(TBD- update .sh to do this) to eval separate model pairs in one run:
+
 ## Repository Structure
 - `run_pipeline/`: Run the main results
 - `main_results_nbs/`: Jupyter notebooks with code for experiments and analyses.
@@ -29,10 +36,13 @@ Optional command line arguments:
 
 ### Installation
 Clone the repository and install dependencies:
+
 `pip install -r requirements.txt`
 
 Install these SAE libraries:
+
 pip install git+https://github.com/sae-lens/sae-lens.git
+
 pip install git+https://github.com/EleutherAI/sparisfy.git
 
 ## Citations

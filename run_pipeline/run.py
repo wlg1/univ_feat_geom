@@ -106,6 +106,8 @@ def main():
     batch, inputs = get_next_batch(dataset, batch_size=batch_size, max_length=max_length)
 
     ### store sae actvs
+    print("Storing SAE activations")
+
     sae_name = "EleutherAI/sae-pythia-70m-32k"
     saeActvs_by_layer_1 = {}
     for layer_id in range(1, model_A_endLayer, layer_step_size): # step = layer_step_size
@@ -123,6 +125,7 @@ def main():
             saeActvs_by_layer_2[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
     ### run
+    print("Running experiment")
     model_A_layers = list(range(1, model_A_endLayer, layer_step_size))
     model_B_layers = list(range(1, model_B_endLayer, layer_step_size)) 
     # layer_start = 1
