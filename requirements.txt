@@ -19,6 +19,5 @@ safetensors>=0.3.1
 scipy>=1.7.0
 scikit-learn>=1.0.2
 
-# SAE Lens library
-sae-lens>=0.1.0
+# SAE libraries
 

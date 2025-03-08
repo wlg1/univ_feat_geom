@@ -42,6 +42,8 @@ import argparse
 """
 example run:
 python run.py --batch_size 400 --max_length 400 --num_rand_runs 1 --oneToOne_bool --model_A_endLayer 6 --model_B_endLayer 12 --layer_step_size 2
+
+python run.py --batch_size 100 --max_length 100 --num_rand_runs 1 --oneToOne_bool --model_A_endLayer 4 --model_B_endLayer 4 --layer_step_size 2
 """
 
 ### script args
