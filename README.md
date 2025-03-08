@@ -42,6 +42,8 @@ If running Gemma models, login to HF using:
 
 `huggingface-cli login`
 
+Recommended Hardware Requirements: Allocate at least 100 GB of disk space when renting an A100 on Vast.ai
+
 ## Citations
 If you use this code or our findings in your research, please cite our paper:
 
