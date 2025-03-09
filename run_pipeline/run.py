@@ -82,7 +82,8 @@ def main():
     parser.add_argument("--model_B_startLayer", type=int, default=1, help="Model B start layer")
     parser.add_argument("--model_A_endLayer", type=int, default=6, help="Model A end layer")
     parser.add_argument("--model_B_endLayer", type=int, default=12, help="Model B end layer")
-    parser.add_argument("--layer_step_size", type=int, default=1, help="Layer step size")
+    parser.add_argument("--layer_step_size_A", type=int, default=1, help="Layer step size A")
+    parser.add_argument("--layer_step_size_B", type=int, default=1, help="Layer step size B")
     
     args = parser.parse_args()
     
@@ -97,19 +98,21 @@ def main():
     model_B_startLayer = args.model_B_startLayer
     model_A_endLayer = args.model_A_endLayer
     model_B_endLayer = args.model_B_endLayer
-    layer_step_size = args.layer_step_size
+    layer_step_size_A = args.layer_step_size_A
+    layer_step_size_B = args.layer_step_size_B
 
     # model_name_1 = "google/gemma-2-2b"
     # model_name_2 = "google/gemma-2-9b"
-    # batch_size = 100
-    # max_length = 100
+    # batch_size = 150
+    # max_length = 150
     # num_rand_runs = 1
     # oneToOne_bool = True
-    # model_A_startLayer = 13
-    # model_B_startLayer = 22
-    # model_A_endLayer = 14
-    # model_B_endLayer = 23
-    # layer_step_size = 1
+    # model_A_startLayer = 1
+    # model_B_startLayer = 1
+    # model_A_endLayer = 25
+    # model_B_endLayer = 41
+    # layer_step_size_A = 5
+    # layer_step_size_B = 10
 
     ### load models
 
@@ -147,11 +150,11 @@ def main():
         sae_name = "EleutherAI/sae-pythia-70m-32k"
         sae_lib = 'eleuther'
     elif 'google' in model_name_1:
-        # gemma 1: "gemma-2b-res-jb"
+        # gemma 1: "google/gemma-2b-res-jb"
         sae_name = "gemma-scope-2b-pt-res-canonical"
         sae_lib = 'sae_lens'
     saeActvs_by_layer_1 = {}
-    for layer_id in range(model_A_startLayer, model_A_endLayer, layer_step_size): # step = layer_step_size
+    for layer_id in range(model_A_startLayer, model_A_endLayer, layer_step_size_A): 
         print("Model A Layer: " + str(layer_id))
         with torch.inference_mode():
             weight_matrix, reshaped_activations, feature_acts_model = get_sae_actvs(model, sae_name, inputs, 
@@ -170,7 +173,7 @@ def main():
         sae_name_2 = "gemma-scope-9b-pt-res-canonical"
         sae_lib = 'sae_lens'
     saeActvs_by_layer_2 = {}
-    for layer_id in range(model_B_startLayer, model_B_endLayer, layer_step_size): # step = layer_step_size
+    for layer_id in range(model_B_startLayer, model_B_endLayer, layer_step_size_B): 
         print("Model B Layer: " + str(layer_id))
         with torch.inference_mode():
             weight_matrix, reshaped_activations, feature_acts_model = get_sae_actvs(model_2, sae_name_2, inputs, 
@@ -186,8 +189,8 @@ def main():
     print("Running experiment")
     model_layer_to_dictscores = {}
 
-    model_A_layers = list(range(model_A_startLayer, model_A_endLayer, layer_step_size))
-    model_B_layers = list(range(model_B_startLayer, model_B_endLayer, layer_step_size)) 
+    model_A_layers = list(range(model_A_startLayer, model_A_endLayer, layer_step_size_A))
+    model_B_layers = list(range(model_B_startLayer, model_B_endLayer, layer_step_size_B)) 
     for layer_id in model_A_layers:
         print("Model A Layer: " + str(layer_id))
         model_layer_to_dictscores[layer_id] = {}
@@ -202,8 +205,8 @@ def main():
                 print(key + ": " + str(value))
             print("\n")
 
-    with open(f'{sae_name}_{sae_name_2}_multL_scores.pkl', 'wb') as f:
-        pickle.dump(model_layer_to_dictscores, f)
+            with open(f'{sae_name}_{sae_name_2}_multL_scores.pkl', 'wb') as f: # override prev save at each new score
+                pickle.dump(model_layer_to_dictscores, f)
 
 
 if __name__ == "__main__":
