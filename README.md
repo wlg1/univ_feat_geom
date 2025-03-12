@@ -1,11 +1,11 @@
-# SPARSE AUTOENCODERS REVEAL UNIVERSAL FEATURE SPACES ACROSS LARGE LANGUAGE MODELS
+# Sparse Autoencoders Reveal Universal Feature Spaces Across Large Language Models
 
 ## Overview
 This repository provides the code and resources for our research paper, **Sparse Autoencoders Reveal Universal Feature Spaces Across Large Language Models**. In this study, we investigate how different large language models (LLMs) represent concepts in their latent spaces and identify shared features across models, addressing challenges like polysemanticity. By employing sparse autoencoders (SAEs), we transform model activations into interpretable spaces, revealing weakly shared features that enhance understanding of model interpretability, AI safety, and cross-model generalization.
 
 - **Feature Matching Across Models**: Tools for aligning and comparing features across different LLMs using activation correlations.
 - **Similarity Analysis**: Methods for analyzing representational similarity with metrics such as Singular Value Canonical Correlation Analysis (SVCCA).
-- **Visualization**: Scripts for generating heatmaps
+- **Visualization**: Scripts for generating heatmaps and other figures.
 
 ## Repository Structure
 - `run_pipeline/`: Run the main results
