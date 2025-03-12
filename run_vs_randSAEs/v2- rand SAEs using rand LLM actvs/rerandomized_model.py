@@ -1,3 +1,5 @@
+# taken from: https://github.com/ThomasHeap/random_sae
+
 import torch
 import torch.nn as nn
 from typing import Optional

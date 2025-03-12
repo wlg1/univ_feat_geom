@@ -87,7 +87,8 @@ def main():
     # Re-randomize models using the original seed from config.
     model_A = RerandomizedModel(
         model_A,
-        rerandomize_embeddings=config.rerandomize_embeddings,
+        # rerandomize_embeddings=config.rerandomize_embeddings,
+        rerandomize_embeddings=True,
         rerandomize_layer_norm=config.rerandomize_layer_norm,
         seed=config.random_seed
     ).model
