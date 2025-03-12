@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+
 import gc
 import numpy as np
 
@@ -7,7 +8,7 @@ from sparsify.config import SaeConfig
 from sparsify.utils import decoder_impl
 from sparsify import Sae
 
-# Also support alternate SAE loading via sae_lens.
+# Note: also importing the SAE from sae_lens for alternate usage.
 from sae_lens import SAE
 
 def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32, 
@@ -26,21 +27,19 @@ def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32,
     
     Returns:
         weight_matrix_np (numpy.ndarray): The decoder weights.
-        reshaped_activations (torch.Tensor): The pre-activation outputs reshaped.
-        orig_actvs (torch.Tensor): The original batched pre-activations.
+        reshaped_activations_A (torch.Tensor): The pre-activation outputs reshaped.
+        orig (torch.Tensor): The original batched pre-activations.
     """    
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    
+
     LLM_actvs = None
     dataset = TensorDataset(inputs['input_ids'], inputs['attention_mask'])
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     for batch_data in loader:
         input_ids, attention_mask = batch_data
-        batch_inputs = {
-            'input_ids': input_ids.to(model.device), 
-            'attention_mask': attention_mask.to(model.device)
-        }
+        batch_inputs = {'input_ids': input_ids.to(model.device), 
+                        'attention_mask': attention_mask.to(model.device)}
         with torch.no_grad():
             outputs = model(**batch_inputs, output_hidden_states=True)
             if LLM_actvs is None:
@@ -52,11 +51,13 @@ def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32,
         torch.cuda.empty_cache()
         gc.collect()
 
-    # Load the SAE from the hub.
+    ### Get SAE activations ###
     if sae_lib == 'eleuther':
+        # Use the custom hookpoint if provided; otherwise, default to "layers.<layer_id>"
         hookpoint = custom_hookpoint if custom_hookpoint is not None else "layers." + str(layer_id)
         sae = Sae.load_from_hub(sae_name, hookpoint=hookpoint, device=device)
     elif sae_lib == 'sae_lens':
+        # For SAE-Lens, determine sae_id based on the release name.
         if 'scope' in sae_name:
             sae_id = f"layer_{layer_id}/width_16k/canonical"
         else:
@@ -66,10 +67,11 @@ def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32,
             sae_id=sae_id,
         )
         sae = sae.to('cuda')
-        sae.eval()
+        sae.eval()  # Ensure evaluation mode.
     
     weight_matrix_np = sae.W_dec.cpu().detach().numpy()
     
+    # Process the activations in batches.
     pre_act_batches = []
     num_samples = LLM_actvs.size(0)
     for start in range(0, num_samples, batch_size):
@@ -90,13 +92,15 @@ def get_sae_actvs(model, sae_name, inputs, layer_id, batch_size=32,
     torch.cuda.empty_cache()
     gc.collect()
 
+    # Concatenate the processed batches.
     orig_actvs = torch.cat(pre_act_batches, dim=0)
     reshaped_dim = orig_actvs.shape[0] * orig_actvs.shape[1]
-    reshaped_activations = orig_actvs.reshape(reshaped_dim, orig_actvs.shape[-1]).cpu()
+    reshaped_activations_A = orig_actvs.reshape(reshaped_dim, orig_actvs.shape[-1]).cpu()
     
-    return weight_matrix_np, reshaped_activations, orig_actvs
+    return weight_matrix_np, reshaped_activations_A, orig_actvs
 
 def count_zero_columns(tensor):
+    # Check if all elements in each column are zero.
     zero_columns = np.all(tensor == 0, axis=0)
     zero_cols_indices = np.where(zero_columns)[0]
     return np.sum(zero_columns), zero_cols_indices
