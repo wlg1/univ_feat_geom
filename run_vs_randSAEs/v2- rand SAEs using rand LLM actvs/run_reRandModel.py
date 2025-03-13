@@ -69,14 +69,14 @@ def main():
         sae_lib_B = "eleuther"
 
     # Since we are comparing layer 3 SAEs, set the start and end layers accordingly.
-    model_A_startLayer = 3
-    model_A_endLayer = 4  # non-inclusive, so only layer 3
-    model_B_startLayer = 3
-    model_B_endLayer = 4
+    model_A_startLayer = 0
+    model_A_endLayer = 6
+    model_B_startLayer = 0
+    model_B_endLayer = 6
     layer_step_size = 1
 
-    batch_size = 150
-    max_length = 150
+    batch_size = 200
+    max_length = 200
     num_rand_runs = 1
     oneToOne_bool = True
 
@@ -136,8 +136,8 @@ def main():
             )
             saeActvs_by_layer_A[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
-    with open('saeActvs_by_layer_A.pkl', 'wb') as f:
-        pickle.dump(saeActvs_by_layer_A, f)
+    # with open('saeActvs_by_layer_A.pkl', 'wb') as f:
+    #     pickle.dump(saeActvs_by_layer_A, f)
 
     print("Storing SAE activations for Model B")
     saeActvs_by_layer_B = {}
@@ -155,8 +155,8 @@ def main():
             )
             saeActvs_by_layer_B[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
-    with open('saeActvs_by_layer_B.pkl', 'wb') as f:
-        pickle.dump(saeActvs_by_layer_B, f)
+    # with open('saeActvs_by_layer_B.pkl', 'wb') as f:
+    #     pickle.dump(saeActvs_by_layer_B, f)
 
     ### Run experiment comparing the two models’ SAE activations.
     print("Running experiment")

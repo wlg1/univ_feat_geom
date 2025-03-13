@@ -15,9 +15,10 @@ class Config:
     os.environ['HF_HOME'] = str(cache_dir)
 
     # Model settings
-    model_name = "EleutherAI/pythia-70m-deduped"
+    # model_name = "EleutherAI/pythia-70m-deduped"
+    model_name = "EleutherAI/pythia-70m"
     use_step0 = False
-    rerandomize = False  # Whether to use rerandomization
+    rerandomize = True  # Whether to use rerandomization
     rerandomize_embeddings = False  # Whether to rerandomize embeddings too
     rerandomize_layer_norm = False  # Whether to rerandomize layer norm parameters
     

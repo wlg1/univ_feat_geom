@@ -196,7 +196,7 @@ def main():
         model_layer_to_dictscores[layer_id] = {}
         for layer_id_2 in model_B_layers: # in range(layer_start, layer_end): # 0, 12
             print("Model B Layer: " + str(layer_id_2))
-            model_layer_to_dictscores[layer_id][layer_id_2] = run_expm(inputs, tokenizer, layer_id, 
+            model_layer_to_dictscores[layer_id][layer_id_2] = run_expm(inputs, tokenizer, 
                                                         saeActvs_by_layer_1[layer_id],
                                                         saeActvs_by_layer_2[layer_id_2], 
                                                         num_rand_runs=num_rand_runs, oneToOne_bool=oneToOne_bool)
