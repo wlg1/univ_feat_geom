@@ -43,30 +43,14 @@ def main():
     # For this experiment we compare the SAE used for pythia-70m at layer 3.
     model_name = "EleutherAI/pythia-70m"
     
-    # Toggle which SAE to use:
-    use_custom_sae = True   # If True, use custom SAE from wlog/random_sae_pythia_70m.
-    # For model A (e.g. custom SAE) and model B (original SAE) you can set separately:
-    use_custom_sae_A = True
-    use_custom_sae_B = False
-
-    # Define SAE parameters based on the flag.
-    if use_custom_sae_A:
-        sae_name_A = "wlog/random_sae_pythia_70m"
-        hookpoint_A = "gpt_neox.layers.3"
-        sae_lib_A = "eleuther"
-    else:
-        sae_name_A = "EleutherAI/sae-pythia-70m-32k"
-        hookpoint_A = "layers.3"
-        sae_lib_A = "eleuther"
-        
-    if use_custom_sae_B:
-        sae_name_B = "wlog/random_sae_pythia_70m"
-        hookpoint_B = "gpt_neox.layers.3"
-        sae_lib_B = "eleuther"
-    else:
-        sae_name_B = "EleutherAI/sae-pythia-70m-32k"
-        hookpoint_B = "layers.3"
-        sae_lib_B = "eleuther"
+    sae_name_A = "wlog/random_sae_pythia_70m_32k"
+    # sae_name_A = "EleutherAI/sae-pythia-70m-32k"
+    sae_lib_A = "eleuther"
+    
+    # sae_name_B = "wlog/random_sae_pythia_70m_32k_seed32"
+    # sae_name_B = "EleutherAI/sae-pythia-70m-32k"
+    sae_name_B = "wlog/sae_pythia_70m_32k"
+    sae_lib_B = "eleuther"
 
     # Since we are comparing layer 3 SAEs, set the start and end layers accordingly.
     model_A_startLayer = 0
@@ -78,25 +62,27 @@ def main():
     batch_size = 200
     max_length = 200
     num_rand_runs = 1
-    oneToOne_bool = True
+    oneToOne_bool = False
 
     ### Load base language models and tokenizers
     model_A = AutoModelForCausalLM.from_pretrained(model_name)
     model_B = AutoModelForCausalLM.from_pretrained(model_name)
 
     # Re-randomize models using the original seed from config.
-    model_A = RerandomizedModel(
-        model_A,
-        rerandomize_embeddings=config.rerandomize_embeddings,
-        rerandomize_layer_norm=config.rerandomize_layer_norm,
-        seed=config.random_seed
-    ).model
-    # model_B = RerandomizedModel(
-    #     model_B,
-    #     rerandomize_embeddings=config.rerandomize_embeddings,
-    #     rerandomize_layer_norm=config.rerandomize_layer_norm,
-    #     seed=config.random_seed
-    # ).model
+    if 'random' in sae_name_A:
+        model_A = RerandomizedModel(
+            model_A,
+            rerandomize_embeddings=config.rerandomize_embeddings,
+            rerandomize_layer_norm=config.rerandomize_layer_norm,
+            seed=config.random_seed
+        ).model
+    if 'random' in sae_name_B:
+        model_B = RerandomizedModel(
+            model_B,
+            rerandomize_embeddings=config.rerandomize_embeddings,
+            rerandomize_layer_norm=config.rerandomize_layer_norm,
+            seed=config.random_seed
+        ).model
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
@@ -117,7 +103,7 @@ def main():
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=max_length)
         return batch, inputs
 
-    batch, inputs = get_next_batch(dataset, batch_size=batch_size, max_length=max_length)
+    _, inputs = get_next_batch(dataset, batch_size=batch_size, max_length=max_length)
 
     ### Process SAE activations for each model.
     print("Storing SAE activations for Model A")
@@ -131,8 +117,7 @@ def main():
                 inputs, 
                 layer_id, 
                 batch_size=32,
-                sae_lib=sae_lib_A,
-                custom_hookpoint=hookpoint_A  # custom hookpoint used if custom SAE is desired.
+                sae_lib=sae_lib_A
             )
             saeActvs_by_layer_A[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
@@ -150,8 +135,7 @@ def main():
                 inputs, 
                 layer_id, 
                 batch_size=32,
-                sae_lib=sae_lib_B,
-                custom_hookpoint=hookpoint_B
+                sae_lib=sae_lib_B
             )
             saeActvs_by_layer_B[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
@@ -161,8 +145,8 @@ def main():
     ### Run experiment comparing the two models’ SAE activations.
     print("Running experiment")
 
-    sae_name_A_clean = sae_name_A.replace('/', '_')
-    sae_name_B_clean = sae_name_B.replace('/', '_')
+    sae_name_A = sae_name_A.replace('/', '_')
+    sae_name_B = sae_name_B.replace('/', '_')
 
     model_layer_to_dictscores = {}
 
@@ -174,7 +158,7 @@ def main():
         for layer_id_2 in model_B_layers:
             print("Model B Layer: " + str(layer_id_2))
             model_layer_to_dictscores[layer_id][layer_id_2] = run_expm(
-                inputs, tokenizer, layer_id, 
+                inputs, tokenizer, 
                 saeActvs_by_layer_A[layer_id],
                 saeActvs_by_layer_B[layer_id_2], 
                 num_rand_runs=num_rand_runs, 
@@ -183,7 +167,7 @@ def main():
             for key, value in model_layer_to_dictscores[layer_id][layer_id_2].items():
                 print(key + ": " + str(value))
             print("\n")
-            with open(f'{sae_name_A_clean}_{sae_name_B_clean}_multL_scores.pkl', 'wb') as f:
+            with open(f'{sae_name_A}_{sae_name_B}_multL_scores.pkl', 'wb') as f:
                 pickle.dump(model_layer_to_dictscores, f)
 
 if __name__ == "__main__":
