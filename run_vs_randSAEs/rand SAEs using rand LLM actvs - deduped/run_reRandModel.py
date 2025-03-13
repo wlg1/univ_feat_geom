@@ -41,7 +41,8 @@ from experiment_config import config
 def main():
     # --- Set model and experiment parameters --- 
     # For this experiment we compare the SAE used for pythia-70m at layer 3.
-    model_name = "EleutherAI/pythia-70m"
+    # model_name = "EleutherAI/pythia-70m"
+    model_name = "EleutherAI/pythia-70m-deduped"
     
     # Toggle which SAE to use:
     use_custom_sae = True   # If True, use custom SAE from wlog/random_sae_pythia_70m.
@@ -51,7 +52,7 @@ def main():
 
     # Define SAE parameters based on the flag.
     if use_custom_sae_A:
-        sae_name_A = "wlog/random_sae_pythia_70m"
+        sae_name_A = "wlog/random_sae_pythia_70m_deduped"
         hookpoint_A = "gpt_neox.layers.3"
         sae_lib_A = "eleuther"
     else:
@@ -60,19 +61,24 @@ def main():
         sae_lib_A = "eleuther"
         
     if use_custom_sae_B:
-        sae_name_B = "wlog/random_sae_pythia_70m"
+        sae_name_B = "wlog/random_sae_pythia_70m_deduped"
         hookpoint_B = "gpt_neox.layers.3"
         sae_lib_B = "eleuther"
     else:
-        sae_name_B = "EleutherAI/sae-pythia-70m-32k"
+        # sae_name_B = "EleutherAI/sae-pythia-70m-32k"
+        sae_name_B = "EleutherAI/sae-pythia-70m-deduped-32k"        
         hookpoint_B = "layers.3"
         sae_lib_B = "eleuther"
 
     # Since we are comparing layer 3 SAEs, set the start and end layers accordingly.
-    model_A_startLayer = 3
-    model_A_endLayer = 4  # non-inclusive, so only layer 3
-    model_B_startLayer = 3
-    model_B_endLayer = 4
+    # model_A_startLayer = 3
+    # model_A_endLayer = 4  # non-inclusive, so only layer 3
+    # model_B_startLayer = 3
+    # model_B_endLayer = 4
+    model_A_startLayer = 0
+    model_A_endLayer = 6  # non-inclusive, so only layer 3
+    model_B_startLayer = 0
+    model_B_endLayer = 6
     layer_step_size = 1
 
     batch_size = 150
@@ -136,8 +142,8 @@ def main():
             )
             saeActvs_by_layer_A[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
-    with open('saeActvs_by_layer_A.pkl', 'wb') as f:
-        pickle.dump(saeActvs_by_layer_A, f)
+    # with open('saeActvs_by_layer_A.pkl', 'wb') as f:
+    #     pickle.dump(saeActvs_by_layer_A, f)
 
     print("Storing SAE activations for Model B")
     saeActvs_by_layer_B = {}
@@ -155,8 +161,8 @@ def main():
             )
             saeActvs_by_layer_B[layer_id] = (weight_matrix, reshaped_activations, feature_acts_model)
 
-    with open('saeActvs_by_layer_B.pkl', 'wb') as f:
-        pickle.dump(saeActvs_by_layer_B, f)
+    # with open('saeActvs_by_layer_B.pkl', 'wb') as f:
+    #     pickle.dump(saeActvs_by_layer_B, f)
 
     ### Run experiment comparing the two models’ SAE activations.
     print("Running experiment")
