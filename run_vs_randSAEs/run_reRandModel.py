@@ -43,26 +43,26 @@ def main():
     # For this experiment we compare the SAE used for pythia-70m at layer 3.
     model_name = "EleutherAI/pythia-70m"
     
+    # sae_name_A = "wlog/sae_pythia_70m_32k_seed32"
     sae_name_A = "wlog/random_sae_pythia_70m_32k"
     # sae_name_A = "EleutherAI/sae-pythia-70m-32k"
     sae_lib_A = "eleuther"
     
-    # sae_name_B = "wlog/random_sae_pythia_70m_32k_seed32"
     # sae_name_B = "EleutherAI/sae-pythia-70m-32k"
     sae_name_B = "wlog/sae_pythia_70m_32k"
     sae_lib_B = "eleuther"
 
     # Since we are comparing layer 3 SAEs, set the start and end layers accordingly.
-    model_A_startLayer = 0
+    model_A_startLayer = 1
     model_A_endLayer = 6
-    model_B_startLayer = 0
+    model_B_startLayer = 1
     model_B_endLayer = 6
     layer_step_size = 1
 
     batch_size = 200
     max_length = 200
     num_rand_runs = 1
-    oneToOne_bool = False
+    oneToOne_bool = True
 
     ### Load base language models and tokenizers
     model_A = AutoModelForCausalLM.from_pretrained(model_name)
@@ -74,14 +74,14 @@ def main():
             model_A,
             rerandomize_embeddings=config.rerandomize_embeddings,
             rerandomize_layer_norm=config.rerandomize_layer_norm,
-            seed=config.random_seed
+            seed=config.random_seed # 42
         ).model
     if 'random' in sae_name_B:
         model_B = RerandomizedModel(
             model_B,
             rerandomize_embeddings=config.rerandomize_embeddings,
             rerandomize_layer_norm=config.rerandomize_layer_norm,
-            seed=config.random_seed
+            seed=32
         ).model
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
