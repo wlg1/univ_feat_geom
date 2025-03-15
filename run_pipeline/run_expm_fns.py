@@ -9,7 +9,7 @@ from plot_fns import *
 
 def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100, 
              oneToOne_bool=False, manyA_1B_bool=True):
-    junk_words = ['.', '\\n', '\n', '', ' ', '-', ',', '!', '?', '<|endoftext|>' , '<bos>', '|bos|', '<pad>']
+    nonconc_words = ['.', '\\n', '\n', '', ' ', '-', ',', '!', '?', '<|endoftext|>' , '<bos>', '|bos|', '<pad>']
     dictscores = {}
 
     weight_matrix_1, reshaped_activations_A, feature_acts_model_A = saeActvs_1
@@ -52,8 +52,8 @@ def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100,
         top_B_labels = store_top_toks(ds_top_acts_indices, inputs['input_ids'], tokenizer)
 
         flag = True
-        for junk in junk_words:
-            if junk in top_A_labels or junk in top_B_labels:
+        for filt_word in nonconc_words:
+            if filt_word in top_A_labels or filt_word in top_B_labels:
                 flag = False
                 break
         if flag and len(set(top_A_labels).intersection(set(top_B_labels))) > 0:

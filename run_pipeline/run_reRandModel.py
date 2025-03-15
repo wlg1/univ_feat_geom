@@ -41,11 +41,15 @@ from experiment_config import config
 def main():
     # --- Set model and experiment parameters --- 
     # For this experiment we compare the SAE used for pythia-70m at layer 3.
-    model_name = "EleutherAI/pythia-70m"
+    model_name_A = "EleutherAI/pythia-70m"
+    model_name_B = "EleutherAI/pythia-70m"
+
+    ## Use SAE with fewer features as model B to be "one" (when using manyA_1B_bool=True in run_expms.py)
     
     # sae_name_A = "wlog/sae_pythia_70m_32k_seed32"
-    sae_name_A = "wlog/random_sae_pythia_70m_32k"
-    # sae_name_A = "EleutherAI/sae-pythia-70m-32k"
+    # sae_name_A = "wlog/random_sae_pythia_70m_32k"
+    sae_name_A = "EleutherAI/sae-pythia-70m-32k"
+    # sae_name_A = "wlog/sae_pythia_70m_64k"
     sae_lib_A = "eleuther"
     
     # sae_name_B = "EleutherAI/sae-pythia-70m-32k"
@@ -65,8 +69,8 @@ def main():
     oneToOne_bool = True
 
     ### Load base language models and tokenizers
-    model_A = AutoModelForCausalLM.from_pretrained(model_name)
-    model_B = AutoModelForCausalLM.from_pretrained(model_name)
+    model_A = AutoModelForCausalLM.from_pretrained(model_name_A)
+    model_B = AutoModelForCausalLM.from_pretrained(model_name_B)
 
     # Re-randomize models using the original seed from config.
     if 'random' in sae_name_A:
@@ -84,7 +88,7 @@ def main():
             seed=32
         ).model
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name_A)
     tokenizer.pad_token = tokenizer.eos_token
 
     ### Load data using a streaming dataset.
@@ -157,6 +161,11 @@ def main():
         model_layer_to_dictscores[layer_id] = {}
         for layer_id_2 in model_B_layers:
             print("Model B Layer: " + str(layer_id_2))
+            if layer_id == layer_id_2 and (sae_name_A == sae_name_B):
+                model_layer_to_dictscores[layer_id][layer_id_2] = {}
+                model_layer_to_dictscores[layer_id][layer_id_2]["svcca_paired"] = 1.0
+                model_layer_to_dictscores[layer_id][layer_id_2]["rsa_paired"] = 1.0
+                continue
             model_layer_to_dictscores[layer_id][layer_id_2] = run_expm(
                 inputs, tokenizer, 
                 saeActvs_by_layer_A[layer_id],
@@ -169,6 +178,8 @@ def main():
             print("\n")
             with open(f'{sae_name_A}_{sae_name_B}_multL_scores.pkl', 'wb') as f:
                 pickle.dump(model_layer_to_dictscores, f)
+    with open(f'{sae_name_A}_{sae_name_B}_multL_scores.pkl', 'wb') as f:
+        pickle.dump(model_layer_to_dictscores, f)
 
 if __name__ == "__main__":
     main()
