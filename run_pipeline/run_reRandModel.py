@@ -41,30 +41,54 @@ from experiment_config import config
 def main():
     # --- Set model and experiment parameters --- 
     # For this experiment we compare the SAE used for pythia-70m at layer 3.
-    model_name_A = "EleutherAI/pythia-70m"
-    model_name_B = "EleutherAI/pythia-70m"
+    # model_name_A = "EleutherAI/pythia-160m"
+    # model_name_A = "EleutherAI/pythia-70m"
+    model_name_A = "google/gemma-2-9b"
+
+    # model_name_B = "EleutherAI/pythia-70m"
+    model_name_B = "google/gemma-2-9b-it"
 
     ## Use SAE with fewer features as model B to be "one" (when using manyA_1B_bool=True in run_expms.py)
     
     # sae_name_A = "wlog/sae_pythia_70m_32k_seed32"
     # sae_name_A = "wlog/random_sae_pythia_70m_32k"
-    sae_name_A = "EleutherAI/sae-pythia-70m-32k"
+    # sae_name_A = "EleutherAI/sae-pythia-70m-32k"
+    # sae_name_A = "EleutherAI/sae-pythia-160m-32k"
     # sae_name_A = "wlog/sae_pythia_70m_64k"
-    sae_lib_A = "eleuther"
+    # sae_name_A = "wlog/sae_pythia_70m_32k"
+    # sae_name_A = "wlog/sae_pythia_160m_24k"
+    # sae_lib_A = "eleuther"
+    sae_name_A = "google/gemma-scope-9b-pt-res"
+    sae_lib_A = "sae_lens"
     
     # sae_name_B = "EleutherAI/sae-pythia-70m-32k"
-    sae_name_B = "wlog/sae_pythia_70m_32k"
-    sae_lib_B = "eleuther"
+    # sae_name_B = "wlog/sae_pythia_70m_32k"
+    # sae_name_B = "wlog/sae_pythia_70m_16k"
+    # sae_lib_B = "eleuther"
+    sae_name_B = "google/gemma-scope-9b-it-res"
+    sae_lib_B = "sae_lens"
+
+    # dataset = "Skylion007/openwebtext"
+    dataset = "togethercomputer/RedPajama-Data-1T-Sample"
 
     # Since we are comparing layer 3 SAEs, set the start and end layers accordingly.
-    model_A_startLayer = 1
-    model_A_endLayer = 6
-    model_B_startLayer = 1
-    model_B_endLayer = 6
-    layer_step_size = 1
+    # model_A_startLayer = 2
+    # model_A_endLayer = 11
+    # layer_step_size_A = 2
+    # model_A_startLayer = 21
+    # model_A_endLayer = 42
+    # layer_step_size_A = 10
+    # model_A_layers = list(range(model_A_startLayer, model_A_endLayer, layer_step_size_A))
+    model_A_layers = [9, 20, 31]
 
-    batch_size = 200
-    max_length = 200
+    # model_B_startLayer = 21
+    # model_B_endLayer = 42
+    # layer_step_size_B = 10
+    # model_B_layers = list(range(model_B_startLayer, model_B_endLayer, layer_step_size_B))
+    model_B_layers = [9, 20, 31]
+
+    batch_size = 150
+    max_length = 150
     num_rand_runs = 1
     oneToOne_bool = True
 
@@ -93,7 +117,7 @@ def main():
 
     ### Load data using a streaming dataset.
     from datasets import load_dataset
-    dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True, trust_remote_code=True)
+    dataset = load_dataset(dataset, split="train", streaming=True, trust_remote_code=True)
 
     def get_next_batch(dataset, batch_size=100, max_length=100):
         batch = []
@@ -112,7 +136,7 @@ def main():
     ### Process SAE activations for each model.
     print("Storing SAE activations for Model A")
     saeActvs_by_layer_A = {}
-    for layer_id in range(model_A_startLayer, model_A_endLayer, layer_step_size): 
+    for layer_id in model_A_layers:
         print("Model A Layer: " + str(layer_id))
         with torch.inference_mode():
             weight_matrix, reshaped_activations, feature_acts_model = get_sae_actvs(
@@ -130,7 +154,7 @@ def main():
 
     print("Storing SAE activations for Model B")
     saeActvs_by_layer_B = {}
-    for layer_id in range(model_B_startLayer, model_B_endLayer, layer_step_size): 
+    for layer_id in model_B_layers:
         print("Model B Layer: " + str(layer_id))
         with torch.inference_mode():
             weight_matrix, reshaped_activations, feature_acts_model = get_sae_actvs(
@@ -154,8 +178,6 @@ def main():
 
     model_layer_to_dictscores = {}
 
-    model_A_layers = list(range(model_A_startLayer, model_A_endLayer, layer_step_size))
-    model_B_layers = list(range(model_B_startLayer, model_B_endLayer, layer_step_size))
     for layer_id in model_A_layers:
         print("Model A Layer: " + str(layer_id))
         model_layer_to_dictscores[layer_id] = {}

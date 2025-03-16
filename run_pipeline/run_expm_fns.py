@@ -8,8 +8,9 @@ from get_actv_fns import *
 from plot_fns import *
 
 def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100, 
-             oneToOne_bool=False, manyA_1B_bool=True):
+             oneToOne_bool=False, manyA_1B_bool=True, nonconc_words=[], rand_baselines_bool=True):
     nonconc_words = ['.', '\\n', '\n', '', ' ', '-', ',', '!', '?', '<|endoftext|>' , '<bos>', '|bos|', '<pad>']
+    # nonconc_words = ['.', '\\n', '\n', '<|endoftext|>' , '<bos>', '|bos|', '<pad>']
     dictscores = {}
 
     weight_matrix_1, reshaped_activations_A, feature_acts_model_A = saeActvs_1
@@ -130,18 +131,20 @@ def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100,
 
     dictscores["svcca_paired"] = svcca(weight_matrix_1[new_max_corr_inds_A], weight_matrix_2[new_max_corr_inds_B], "nd")
     print('svcca paired done')
-    rand_scores = shuffle_rand(num_rand_runs, weight_matrix_1[new_max_corr_inds_A],
-                                weight_matrix_2[new_max_corr_inds_B], num_feats,
-                                svcca, shapereq_bool=True)
-    dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
-    dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
+    if rand_baselines_bool:
+        rand_scores = shuffle_rand(num_rand_runs, weight_matrix_1[new_max_corr_inds_A],
+                                    weight_matrix_2[new_max_corr_inds_B], num_feats,
+                                    svcca, shapereq_bool=True)
+        dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
+        dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
 
     dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_1[new_max_corr_inds_A], weight_matrix_2[new_max_corr_inds_B], "nd")
     print('rsa paired done')
-    rand_scores = shuffle_rand(num_rand_runs, weight_matrix_1[new_max_corr_inds_A],
-                                                weight_matrix_2[new_max_corr_inds_B], num_feats,
-                                                representational_similarity_analysis, shapereq_bool=True)
-    dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
-    dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
+    if rand_baselines_bool:
+        rand_scores = shuffle_rand(num_rand_runs, weight_matrix_1[new_max_corr_inds_A],
+                                                    weight_matrix_2[new_max_corr_inds_B], num_feats,
+                                                    representational_similarity_analysis, shapereq_bool=True)
+        dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
+        dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
 
     return dictscores
