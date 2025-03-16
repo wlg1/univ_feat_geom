@@ -42,31 +42,32 @@ def main():
     # --- Set model and experiment parameters --- 
     # For this experiment we compare the SAE used for pythia-70m at layer 3.
     # model_name_A = "EleutherAI/pythia-160m"
-    # model_name_A = "EleutherAI/pythia-70m"
-    model_name_A = "google/gemma-2-9b"
+    model_name_A = "EleutherAI/pythia-70m"
+    # model_name_A = "google/gemma-2-9b"
 
-    # model_name_B = "EleutherAI/pythia-70m"
-    model_name_B = "google/gemma-2-9b-it"
+    model_name_B = "EleutherAI/pythia-70m"
+    # model_name_B = "google/gemma-2-9b-it"
 
     ## Use SAE with fewer features as model B to be "one" (when using manyA_1B_bool=True in run_expms.py)
     
-    # sae_name_A = "wlog/sae_pythia_70m_32k_seed32"
+    sae_name_A = "wlog/sae_pythia_70m_32k_seed32"
     # sae_name_A = "wlog/random_sae_pythia_70m_32k"
     # sae_name_A = "EleutherAI/sae-pythia-70m-32k"
     # sae_name_A = "EleutherAI/sae-pythia-160m-32k"
     # sae_name_A = "wlog/sae_pythia_70m_64k"
     # sae_name_A = "wlog/sae_pythia_70m_32k"
     # sae_name_A = "wlog/sae_pythia_160m_24k"
-    # sae_lib_A = "eleuther"
-    sae_name_A = "google/gemma-scope-9b-pt-res"
-    sae_lib_A = "sae_lens"
+    sae_lib_A = "eleuther"
+    # sae_name_A = "google/gemma-scope-9b-pt-res"
+    # sae_lib_A = "sae_lens"
     
+    sae_name_B = "wlog/sae_pythia_70m_32k_seed32"
     # sae_name_B = "EleutherAI/sae-pythia-70m-32k"
     # sae_name_B = "wlog/sae_pythia_70m_32k"
     # sae_name_B = "wlog/sae_pythia_70m_16k"
-    # sae_lib_B = "eleuther"
-    sae_name_B = "google/gemma-scope-9b-it-res"
-    sae_lib_B = "sae_lens"
+    sae_lib_B = "eleuther"
+    # sae_name_B = "google/gemma-scope-9b-it-res"
+    # sae_lib_B = "sae_lens"
 
     # dataset = "Skylion007/openwebtext"
     dataset = "togethercomputer/RedPajama-Data-1T-Sample"
@@ -75,20 +76,20 @@ def main():
     # model_A_startLayer = 2
     # model_A_endLayer = 11
     # layer_step_size_A = 2
-    # model_A_startLayer = 21
-    # model_A_endLayer = 42
-    # layer_step_size_A = 10
-    # model_A_layers = list(range(model_A_startLayer, model_A_endLayer, layer_step_size_A))
-    model_A_layers = [9, 20, 31]
+    model_A_startLayer = 1
+    model_A_endLayer = 6
+    layer_step_size_A = 1
+    model_A_layers = list(range(model_A_startLayer, model_A_endLayer, layer_step_size_A))
+    # model_A_layers = [9, 20, 31]
 
-    # model_B_startLayer = 21
-    # model_B_endLayer = 42
-    # layer_step_size_B = 10
-    # model_B_layers = list(range(model_B_startLayer, model_B_endLayer, layer_step_size_B))
-    model_B_layers = [9, 20, 31]
+    model_B_startLayer = 1
+    model_B_endLayer = 6
+    layer_step_size_B = 1
+    model_B_layers = list(range(model_B_startLayer, model_B_endLayer, layer_step_size_B))
+    # model_B_layers = [9, 20, 31]
 
-    batch_size = 150
-    max_length = 150
+    batch_size = 200
+    max_length = 200
     num_rand_runs = 1
     oneToOne_bool = True
 
@@ -183,11 +184,12 @@ def main():
         model_layer_to_dictscores[layer_id] = {}
         for layer_id_2 in model_B_layers:
             print("Model B Layer: " + str(layer_id_2))
-            if layer_id == layer_id_2 and (sae_name_A == sae_name_B):
-                model_layer_to_dictscores[layer_id][layer_id_2] = {}
-                model_layer_to_dictscores[layer_id][layer_id_2]["svcca_paired"] = 1.0
-                model_layer_to_dictscores[layer_id][layer_id_2]["rsa_paired"] = 1.0
-                continue
+            ## already ran this; this just takes a while to run so this skips it if re-doing this: ##
+            # if layer_id == layer_id_2 and (sae_name_A == sae_name_B):
+            #     model_layer_to_dictscores[layer_id][layer_id_2] = {}
+            #     model_layer_to_dictscores[layer_id][layer_id_2]["svcca_paired"] = 1.0
+            #     model_layer_to_dictscores[layer_id][layer_id_2]["rsa_paired"] = 1.0
+            #     continue
             model_layer_to_dictscores[layer_id][layer_id_2] = run_expm(
                 inputs, tokenizer, 
                 saeActvs_by_layer_A[layer_id],
