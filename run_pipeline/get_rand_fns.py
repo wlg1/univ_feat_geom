@@ -1,3 +1,4 @@
+import numpy as np
 def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):
     all_rand_scores = []
     i = 0
@@ -15,7 +16,8 @@ def score_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, s
             i += 1
         except:
             continue
-    return sum(all_rand_scores) / len(all_rand_scores)
+    # return sum(all_rand_scores) / len(all_rand_scores)
+    return all_rand_scores
 
 import random
 def shuffle_rand(num_runs, weight_matrix_np, weight_matrix_2, num_feats, sim_fn, shapereq_bool):

@@ -27,48 +27,53 @@ def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100,
     else:
         max_corr_inds, max_corr_vals = batched_correlation(reshaped_activations_B, reshaped_activations_A)
 
-    # num_unq_pairs = len(list(set(max_corr_inds)))
-    # print("% unique: ", num_unq_pairs / len(max_corr_inds))
-
     dictscores["mean_actv_corr"] = sum(max_corr_vals) / len(max_corr_vals)
+
     num_unq_pairs = len(list(set(max_corr_inds)))
-    print("% unique: ", num_unq_pairs / reshaped_activations_B.shape[-1])
+    print("% unique: ", num_unq_pairs / len(max_corr_inds))
     dictscores["num_feat_unique_beforeFilt"] = num_unq_pairs
+    dictscores["total_feats_beforeFilt"] = len(max_corr_inds)
 
     ########### filter ###########
     ### keyword filtering ###
     samp_m = 5
 
-    filt_corr_ind_A = []
-    filt_corr_ind_B = []
-    for corr_ind_feat, corr_val_feat in enumerate(max_corr_inds):
-        if manyA_1B_bool:
-            feat_B, feat_A = corr_ind_feat, corr_val_feat
+    if nonconc_words:
+        filt_corr_ind_A = []
+        filt_corr_ind_B = []
+        for corr_ind_feat, corr_val_feat in enumerate(max_corr_inds):
+            if manyA_1B_bool:
+                feat_B, feat_A = corr_ind_feat, corr_val_feat
+            else:
+                feat_A, feat_B = corr_ind_feat, corr_val_feat
+            ds_top_acts_indices = highest_activating_tokens(feature_acts_model_A, feat_A, samp_m, batch_tokens= inputs['input_ids'])
+            top_A_labels = store_top_toks(ds_top_acts_indices, inputs['input_ids'], tokenizer)
+
+            ds_top_acts_indices = highest_activating_tokens(feature_acts_model_B, feat_B, samp_m, batch_tokens= inputs['input_ids'])
+            top_B_labels = store_top_toks(ds_top_acts_indices, inputs['input_ids'], tokenizer)
+
+            flag = True
+            for filt_word in nonconc_words:
+                if filt_word in top_A_labels or filt_word in top_B_labels:
+                    flag = False
+                    break
+            if flag and len(set(top_A_labels).intersection(set(top_B_labels))) > 0:
+                filt_corr_ind_A.append(feat_A)
+                filt_corr_ind_B.append(feat_B)
         else:
-            feat_A, feat_B = corr_ind_feat, corr_val_feat
-        ds_top_acts_indices = highest_activating_tokens(feature_acts_model_A, feat_A, samp_m, batch_tokens= inputs['input_ids'])
-        top_A_labels = store_top_toks(ds_top_acts_indices, inputs['input_ids'], tokenizer)
-
-        ds_top_acts_indices = highest_activating_tokens(feature_acts_model_B, feat_B, samp_m, batch_tokens= inputs['input_ids'])
-        top_B_labels = store_top_toks(ds_top_acts_indices, inputs['input_ids'], tokenizer)
-
-        flag = True
-        for filt_word in nonconc_words:
-            if filt_word in top_A_labels or filt_word in top_B_labels:
-                flag = False
-                break
-        if flag and len(set(top_A_labels).intersection(set(top_B_labels))) > 0:
-            filt_corr_ind_A.append(feat_A)
-            filt_corr_ind_B.append(feat_B)
+            filt_corr_ind_A = max_corr_inds
+            filt_corr_ind_B = list(range(len(max_corr_inds)))
 
     if manyA_1B_bool:
-        num_unq_pairs = len(list(set(filt_corr_ind_A)))
-        print("% unique after rmv kw: ", num_unq_pairs / reshaped_activations_A.shape[-1])
-        print("num feats after rmv kw: ", len(filt_corr_ind_A))
-    else:
         num_unq_pairs = len(list(set(filt_corr_ind_B)))
-        print("% unique after rmv kw: ", num_unq_pairs / reshaped_activations_B.shape[-1])
+        print("% unique after rmv kw: ", num_unq_pairs / len(max_corr_inds))
         print("num feats after rmv kw: ", len(filt_corr_ind_B))
+        dictscores["num_feat_after_rmv_kw"] = len(filt_corr_ind_B) 
+    else:
+        num_unq_pairs = len(list(set(filt_corr_ind_A)))
+        print("% unique after rmv kw: ", num_unq_pairs / len(max_corr_inds))
+        print("num feats after rmv kw: ", len(filt_corr_ind_A))
+        dictscores["num_feat_after_rmv_kw"] = len(filt_corr_ind_A)
 
     ### 1-1 filtering ###
     if oneToOne_bool:
@@ -97,8 +102,8 @@ def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100,
                     oneToOne_B.append(ind_B)
 
         num_unq_pairs = len(list(set(oneToOne_A)))
-        print("% unique after 1-1: ", num_unq_pairs / len(oneToOne_A))
         print("num feats after 1-1: ", len(oneToOne_A))
+        dictscores["num_feat_1_to_1"] = len(oneToOne_A)
 
         filt_corr_ind_A = oneToOne_A
         filt_corr_ind_B = oneToOne_B
@@ -118,10 +123,10 @@ def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100,
             new_max_corr_inds_B.append(ind_B)
             new_max_corr_vals.append(val)
 
-    num_unq_pairs = len(list(set(new_max_corr_inds_A)))
-    print("% unique after rmv 0s: ", num_unq_pairs / reshaped_activations_B.shape[-1])
-    print("num feats after rmv 0s: ", len(new_max_corr_inds_A))
-    dictscores["num_feat_kept"] = len(new_max_corr_inds_A)
+    # num_unq_pairs = len(list(set(new_max_corr_inds_A)))
+    # print("% unique after rmv 0s: ", num_unq_pairs / new_max_corr_inds_A)
+    print("num feats after rmv low corr pairs: ", len(new_max_corr_inds_A))
+    dictscores["num_feat_after_rmv_lowCorr"] = len(new_max_corr_inds_A)
 
     dictscores["mean_actv_corr_filt"] = sum(new_max_corr_vals) / len(new_max_corr_vals)
 
@@ -138,13 +143,18 @@ def run_expm(inputs, tokenizer, saeActvs_1, saeActvs_2, num_rand_runs=100,
         dictscores["svcca_rand_mean"] = sum(rand_scores) / len(rand_scores)
         dictscores["svcca_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["svcca_paired"])
 
-    dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_1[new_max_corr_inds_A], weight_matrix_2[new_max_corr_inds_B], "nd")
-    print('rsa paired done')
-    if rand_baselines_bool:
-        rand_scores = shuffle_rand(num_rand_runs, weight_matrix_1[new_max_corr_inds_A],
-                                                    weight_matrix_2[new_max_corr_inds_B], num_feats,
-                                                    representational_similarity_analysis, shapereq_bool=True)
-        dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
-        dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
+    # sel_rand_scores = score_rand(num_rand_runs, weight_matrix_1, weight_matrix_2,
+    #                                             num_feats, svcca, shapereq_bool=True)
+    # dictscores["svcca_sel_rand_mean"] = sum(sel_rand_scores) / len(sel_rand_scores)
+    # dictscores["svcca_sel_rand_pval"] =  np.mean(np.array(sel_rand_scores) >= dictscores["svcca_paired"])
+
+    # dictscores["rsa_paired"] = representational_similarity_analysis(weight_matrix_1[new_max_corr_inds_A], weight_matrix_2[new_max_corr_inds_B], "nd")
+    # print('rsa paired done')
+    # if rand_baselines_bool:
+    #     rand_scores = shuffle_rand(num_rand_runs, weight_matrix_1[new_max_corr_inds_A],
+    #                                                 weight_matrix_2[new_max_corr_inds_B], num_feats,
+    #                                                 representational_similarity_analysis, shapereq_bool=True)
+    #     dictscores["rsa_rand_mean"] = sum(rand_scores) / len(rand_scores)
+    #     dictscores["rsa_rand_pval"] =  np.mean(np.array(rand_scores) >= dictscores["rsa_paired"])
 
     return dictscores

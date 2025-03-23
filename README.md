@@ -26,7 +26,12 @@ Install these SAE libraries:
 
 `pip install sae_lens`
 
+`pip install git+https://github.com/wlg1/sparsify.git`
+
+<!--- 
+Removed sae.pre_acts() on March 22nd 2025 update:
 `pip install git+https://github.com/EleutherAI/sae.git`
+-->
 
 If running Gemma models, login to HF using:
 
