@@ -4,7 +4,7 @@
 
 - Loads the same text batch for both models (Hugging Face `datasets`).
 - Runs both base LMs and **Eleuther `sparsify` SAEs** on the residual stream at chosen layers.
-- Picks active features, estimates **cross-model feature correspondence** via batched activation correlation, runs **UMAP** on decoder directions for the selected features, and writes **JSON + HTML** (Plotly-based UI with hover linking and optional region tools).
+- Picks active features, estimates **cross-model feature correspondence** via a full activation correlation matrix, then **greedy**, **Hungarian** (default one-to-one max-sum correlation over the pool), or **Sinkhorn OT** (POT) alignment; runs **UMAP** on decoder directions for the selected features; writes **JSON + HTML** with **quantitative similarity metrics** (linear CKA, RSA Spearman on activation RDMs, orthogonal Procrustes relative RMSE, pool correlation stats).
 
 ## Prerequisites
 
@@ -70,8 +70,10 @@ python run_pipeline/pythia_feature_mapping_viz.py \
 | `--num-samples` | `256` | Number of rows to draw from the split. |
 | `--max-length` | `128` | Tokenizer max length per example. |
 | `--batch-size` | `16` | LM + SAE batching inside `get_sae_actvs`. |
-| `--corr-batch-size` | `128` | Batch size for correlation matmuls. |
-| `--corr-pool-size` | `3000` | Top active features per side before correlation. |
+| `--corr-batch-size` | `128` | Batch size when building the full activation correlation matrix. |
+| `--corr-pool-size` | `3000` | Top active features per side before alignment (equal counts; required for Hungarian). |
+| `--mapping-method` | `hungarian` | `greedy`, `hungarian` (one-to-one max-sum correlation), or `ot` (Sinkhorn + column argmax; needs `POT`). |
+| `--ot-reg` | `0.05` | Sinkhorn regularization for `--mapping-method ot`. |
 | `--features-per-side` | `1200` | Target number of features to show on the B side (A side is derived from mappings). |
 | `--label-top-k` | `5` | Top activating tokens per feature for hover labels. |
 | `--seed` | `42` | RNG seed (UMAP). |

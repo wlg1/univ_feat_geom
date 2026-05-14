@@ -17,11 +17,19 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 try:
-    from run_pipeline.correlation_fns import batched_correlation
+    from run_pipeline.alignment_fns import (
+        apply_mapping_method,
+        build_activation_corr_matrix,
+        compute_alignment_and_metrics,
+    )
     from run_pipeline.get_actv_fns import get_sae_actvs
     from run_pipeline.interpret_fns import highest_activating_tokens, store_top_toks
 except ImportError:
-    from correlation_fns import batched_correlation
+    from alignment_fns import (
+        apply_mapping_method,
+        build_activation_corr_matrix,
+        compute_alignment_and_metrics,
+    )
     from get_actv_fns import get_sae_actvs
     from interpret_fns import highest_activating_tokens, store_top_toks
 
@@ -1610,6 +1618,7 @@ def _build_payload(
     labels_a: Dict[int, str],
     labels_b: Dict[int, str],
     semantic_categories: List[Dict[str, Any]],
+    metrics: Optional[Dict[str, Any]] = None,
 ) -> Dict:
     selected_a_set = set(selected_a.tolist())
     selected_b_set = set(selected_b.tolist())
@@ -1654,11 +1663,15 @@ def _build_payload(
 
     semantic_groups = _semantic_groups_for_points(points_a, points_b, semantic_categories)
 
+    meta: Dict[str, Any] = {
+        "description": "Cross-model SAE feature UMAP with activation-based alignment (greedy / Hungarian / OT)",
+        "mapping_direction_note": "model_b feature -> aligned model_a feature (see mapping_method in metrics)",
+    }
+    if metrics is not None:
+        meta["metrics"] = metrics
+
     return {
-        "meta": {
-            "description": "Cross-model SAE feature UMAP with activation-correlation mapping",
-            "mapping_direction_note": "model_b feature -> highest correlated model_a feature",
-        },
+        "meta": meta,
         "semantic_groups": semantic_groups,
         "model_a": {
             "name": model_a_name,
@@ -1724,11 +1737,18 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
     }}
     table.semantic-pairs td.num {{ white-space: nowrap; color: #79c0ff; font-variant-numeric: tabular-nums; }}
     table.semantic-pairs td.corr {{ white-space: nowrap; color: #ffa657; }}
+    .metrics-summary {{ font-size: 12px; margin: 0 0 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 8px; background: #161b22; }}
+    .metrics-summary h4 {{ margin: 0 0 8px 0; font-size: 13px; color: #7ee787; }}
+    .metrics-summary table {{ border-collapse: collapse; width: 100%; max-width: 920px; }}
+    .metrics-summary td {{ padding: 4px 8px; border-bottom: 1px solid #21262d; vertical-align: top; }}
+    .metrics-summary td.k {{ color: #8b949e; width: 46%; }}
+    .metrics-summary td.v {{ color: #e6edf3; font-variant-numeric: tabular-nums; }}
   </style>
 </head>
 <body>
   <div class="container">
     <h3 style="margin:0 0 10px 0;">{title}</h3>
+    <div id="metrics-summary" class="metrics-summary" aria-label="Feature space similarity metrics"></div>
     <div class="toolbar toolbar-row">
       <label for="category-select">Semantic group</label>
       <select id="category-select" aria-label="Highlight features by semantic group"></select>
@@ -1826,6 +1846,41 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
     }}
+
+    (function renderMetricsSummary() {{
+      const host = document.getElementById("metrics-summary");
+      if (!host) return;
+      const m = payload.meta && payload.meta.metrics;
+      if (!m) {{
+        host.innerHTML = "<p style='margin:0;color:#8b949e;'>No <code>meta.metrics</code> in this JSON (re-run <code>pythia_feature_mapping_viz.py</code> to populate similarity metrics).</p>";
+        return;
+      }}
+      function fmt(x) {{
+        if (x == null || typeof x !== "number" || !Number.isFinite(x)) return "—";
+        return x.toFixed(4);
+      }}
+      const rows = [
+        ["Alignment method", String(m.mapping_method || "—")],
+        ["Mean |corr| at map (full activation pool)", fmt(m.mean_abs_pool_corr_at_map)],
+        ["Mean corr at map (full activation pool)", fmt(m.mean_pool_corr_at_map)],
+        ["Linear CKA (activations, selected features)", fmt(m.linear_cka_activations)],
+        ["RSA Spearman (activation RDMs, selected)", fmt(m.rsa_spearman_activation_rdm)],
+        ["Orthogonal Procrustes rel. RMSE (activations, selected)", fmt(m.procrustes_rel_rmse_activations)],
+        ["Mean Pearson (per matched column, token axis)", fmt(m.mean_matched_column_pearson)],
+      ];
+      if (m.ot_primal_cost_sinkhorn != null && typeof m.ot_primal_cost_sinkhorn === "number" && Number.isFinite(m.ot_primal_cost_sinkhorn)) {{
+        rows.push(["OT primal cost ⟨T, 1−C⟩ (Sinkhorn)", fmt(m.ot_primal_cost_sinkhorn)]);
+        rows.push(["OT entropic regularization", fmt(m.ot_reg)]);
+      }}
+      const tbl = '<table>' + rows.map(([k, v]) =>
+        '<tr><td class="k">' + escHtml(k) + '</td><td class="v">' + escHtml(String(v)) + '</td></tr>'
+      ).join('') + '</table>';
+      const note = "<p style='margin:8px 0 0 0;color:#8b949e;font-size:11px;line-height:1.45;'>"
+        + "CKA and RSA use the same token positions for selected model-B features and their mapped model-A columns. "
+        + "Procrustes applies an orthogonal map in sample space to best align those matched activation profiles (lower relative RMSE means closer geometry). "
+        + "Hungarian alignment is a one-to-one maximum-total-correlation assignment over the pooled features (equal pool sizes).</p>";
+      host.innerHTML = "<h4>Quantitative feature-space similarity</h4>" + tbl + note;
+    }})();
 
     function rebuildCategoryTable(groupId) {{
       if (!groupId) {{
@@ -2760,26 +2815,51 @@ def build_data(args) -> Dict:
     pool_a = _feature_pool_from_activity(acts_a_2d, args.corr_pool_size)
     pool_b = _feature_pool_from_activity(acts_b_2d, args.corr_pool_size)
 
-    b_subset_idx, b_subset_val = batched_correlation(
-        acts_a_2d[:, pool_a],
-        acts_b_2d[:, pool_b],
-        batch_size=args.corr_batch_size,
+    C = build_activation_corr_matrix(
+        acts_a_2d,
+        pool_a,
+        acts_b_2d,
+        pool_b,
+        batch_cols=max(32, args.corr_batch_size),
     )
-    a_subset_idx, _ = batched_correlation(
-        acts_b_2d[:, pool_b],
-        acts_a_2d[:, pool_a],
-        batch_size=args.corr_batch_size,
+    b_to_a_map, b_to_a_corr, a_to_b_map, ot_plan = apply_mapping_method(
+        C, pool_a, pool_b, args.mapping_method, args.ot_reg
     )
-
-    b_to_a_map = {int(pool_b[j]): int(pool_a[b_subset_idx[j]]) for j in range(len(pool_b))}
-    b_to_a_corr = {int(pool_b[j]): float(b_subset_val[j]) for j in range(len(pool_b))}
-    a_to_b_map = {int(pool_a[i]): int(pool_b[a_subset_idx[i]]) for i in range(len(pool_a))}
 
     b_scores_pool = acts_b_2d[:, pool_b].abs().max(dim=0).values.cpu().numpy()
     selected_b = _select_feature_sets(pool_b, b_scores_pool, args.features_per_side)
     selected_a = np.unique([b_to_a_map[int(feat_b)] for feat_b in selected_b.tolist() if int(feat_b) in b_to_a_map])
     if len(selected_a) == 0 or len(selected_b) == 0:
         raise RuntimeError("No mapped features were selected. Increase --corr-pool-size or provide more input samples.")
+
+    # Prefer, for each selected A, the selected B with highest corr among those mapping to that A (stable UI links).
+    a_to_b_map_refined: Dict[int, int] = {}
+    for fa in selected_a.tolist():
+        best_b: Optional[int] = None
+        best_c = float("-inf")
+        for fb in selected_b.tolist():
+            if b_to_a_map.get(int(fb)) != int(fa):
+                continue
+            c = float(b_to_a_corr.get(int(fb), float("-inf")))
+            if c > best_c:
+                best_c = c
+                best_b = int(fb)
+        if best_b is not None:
+            a_to_b_map_refined[int(fa)] = best_b
+    a_to_b_map = a_to_b_map_refined
+
+    metrics = compute_alignment_and_metrics(
+        acts_a_2d,
+        acts_b_2d,
+        pool_a,
+        pool_b,
+        C,
+        selected_b,
+        b_to_a_map,
+        args.mapping_method,
+        args.ot_reg,
+        ot_plan,
+    )
 
     emb_a = _compute_umap(weights_a[selected_a], seed=args.seed)
     emb_b = _compute_umap(weights_b[selected_b], seed=args.seed)
@@ -2814,6 +2894,7 @@ def build_data(args) -> Dict:
         labels_a=labels_a,
         labels_b=labels_b,
         semantic_categories=_load_semantic_categories(args.semantic_categories_json),
+        metrics=metrics,
     )
     return payload
 
@@ -2855,7 +2936,22 @@ def parse_args():
         "--corr-pool-size",
         type=int,
         default=3000,
-        help="Number of high-activation features per model to keep before correlation mapping.",
+        help="Number of high-activation features per model to keep before alignment. "
+        "Hungarian requires equal pool sizes; use the same value implicitly for both sides.",
+    )
+    parser.add_argument(
+        "--mapping-method",
+        choices=["greedy", "hungarian", "ot"],
+        default="hungarian",
+        help="How to align pool_b columns to pool_a: column-wise argmax (greedy), "
+        "global one-to-one max-sum correlation (Hungarian, equal pool sizes), or "
+        "entropic OT (Sinkhorn via POT) then argmax per column for display.",
+    )
+    parser.add_argument(
+        "--ot-reg",
+        type=float,
+        default=0.05,
+        help="Sinkhorn entropic regularization for --mapping-method ot (POT).",
     )
     parser.add_argument("--features-per-side", type=int, default=1200)
     parser.add_argument("--label-top-k", type=int, default=5)

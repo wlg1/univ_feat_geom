@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository provides the code and resources for our research paper, **Quantifying Feature Space Universality Across Large Language Models via Sparse Autoencoders** ([arXiv:2410.06981](https://arxiv.org/abs/2410.06981)). We study whether **sparse autoencoder (SAE)** feature spaces across different LLMs are geometrically similar even when individual features do not line up one-to-one. We pair features via **activation correlation**, then measure **relational similarity** of decoder weight geometry (e.g. SVCCA, RSA), including how similarity varies across semantic subspaces.
+This repository provides the code and resources for our research paper, **Quantifying Feature Space Universality Across Large Language Models via Sparse Autoencoders** ([arXiv:2410.06981](https://arxiv.org/abs/2410.06981)). We study whether **sparse autoencoder (SAE)** feature spaces across different LLMs are geometrically similar even when individual features do not line up one-to-one. We pair features via **activation correlation** (with optional **Hungarian** or **entropic OT** alignment in the UI tool), then measure **relational similarity** of decoder weight geometry (e.g. SVCCA, RSA), including how similarity varies across semantic subspaces.
 
 - **Feature matching across models**: Align and compare SAE features across LLMs using activation correlations.
 - **Similarity analysis**: Representational similarity on paired feature weights (SVCCA, RSA, baselines).
@@ -10,7 +10,7 @@ This repository provides the code and resources for our research paper, **Quanti
 
 ## Interactive feature-space map (UI)
 
-The script `run_pipeline/pythia_feature_mapping_viz.py` builds a **single self-contained HTML page** (Plotly) with **two linked UMAP panels**—one per model/SAE. The same text batch is run through both base models; features are mapped across models with batched activation correlation; selected decoder directions are embedded with UMAP; hover and selection tools highlight **corresponding features** across panels.
+The script `run_pipeline/pythia_feature_mapping_viz.py` builds a **single self-contained HTML page** (Plotly) with **two linked UMAP panels**—one per model/SAE. The same text batch is run through both base models; features are aligned across models with a full activation correlation matrix (**greedy**, **Hungarian**, or **Sinkhorn OT**); the page reports **CKA**, **RSA**, and **orthogonal Procrustes** statistics on matched activations; selected decoder directions are embedded with UMAP; hover and selection tools highlight **corresponding features** across panels.
 
 **Typical workflow**
 
@@ -25,8 +25,6 @@ Full flags, JSON re-render (`--from-json`), semantic category JSON, and troubles
 <p align="center">
   <img src="docs/images/pythia_sae_feature_map_ui_example.png" alt="Linked dual-UMAP UI for two Pythia SAE feature sets." width="780">
 </p>
-
-<p align="center"><emLinked dual-UMAP UI for two Pythia SAE feature sets.</em></p>
 
 Quick variant with fewer points:
 
