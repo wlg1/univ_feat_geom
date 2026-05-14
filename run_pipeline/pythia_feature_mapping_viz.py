@@ -21,6 +21,7 @@ try:
         apply_mapping_method,
         build_activation_corr_matrix,
         compute_alignment_and_metrics,
+        compute_subset_metrics,
     )
     from run_pipeline.get_actv_fns import get_sae_actvs
     from run_pipeline.interpret_fns import highest_activating_tokens, store_top_toks
@@ -29,6 +30,7 @@ except ImportError:
         apply_mapping_method,
         build_activation_corr_matrix,
         compute_alignment_and_metrics,
+        compute_subset_metrics,
     )
     from get_actv_fns import get_sae_actvs
     from interpret_fns import highest_activating_tokens, store_top_toks
@@ -1527,6 +1529,48 @@ def _semantic_groups_for_points(
     return groups
 
 
+def _pair_arrays_for_semantic_group(
+    g: Dict[str, Any],
+    b_to_a_map: Dict[int, int],
+    a_to_b_map: Dict[int, int],
+    selected_b: np.ndarray,
+    selected_a: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Unique (fa, fb) pairs for metrics: B in group with map, plus A in group with consistent reverse map."""
+    sel_b = {int(x) for x in selected_b.tolist()}
+    sel_a = {int(x) for x in selected_a.tolist()}
+    pairs: List[Tuple[int, int]] = []
+    seen: set = set()
+    for fb in g.get("feature_ids_b") or []:
+        fb = int(fb)
+        if fb not in sel_b or fb not in b_to_a_map:
+            continue
+        fa = int(b_to_a_map[fb])
+        key = (fa, fb)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+    for fa in g.get("feature_ids_a") or []:
+        fa = int(fa)
+        if fa not in sel_a:
+            continue
+        fb = a_to_b_map.get(fa)
+        if fb is None or int(fb) not in sel_b:
+            continue
+        fb = int(fb)
+        if int(b_to_a_map.get(fb, -1)) != fa:
+            continue
+        key = (fa, fb)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+    if not pairs:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.int64)
+    fa_arr = np.array([p[0] for p in pairs], dtype=np.int64)
+    fb_arr = np.array([p[1] for p in pairs], dtype=np.int64)
+    return fa_arr, fb_arr
+
+
 def _load_text_batch(dataset_name: str, split: str, text_key: str, num_samples: int) -> List[str]:
     ds = load_dataset(dataset_name, split=split)
     text_rows = [row[text_key] for row in ds if row.get(text_key)]
@@ -1743,6 +1787,7 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
     .metrics-summary td {{ padding: 4px 8px; border-bottom: 1px solid #21262d; vertical-align: top; }}
     .metrics-summary td.k {{ color: #8b949e; width: 46%; }}
     .metrics-summary td.v {{ color: #e6edf3; font-variant-numeric: tabular-nums; }}
+    .category-metrics-panel {{ margin-top: 0; margin-bottom: 12px; }}
   </style>
 </head>
 <body>
@@ -1757,11 +1802,26 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
       <label class="toggle-mesh"><input type="checkbox" id="toggle-mesh-category" /> Subset mesh (category)</label>
       <span id="mesh-hint" style="font-size:11px;color:#8b949e;max-width:420px;"></span>
     </div>
+    <div id="category-metrics" class="metrics-summary category-metrics-panel" style="display:none;" aria-live="polite" aria-label="Metrics for selected semantic category"></div>
     <div class="toolbar toolbar-row drag-mode-row">
       <span class="hdr">Drag on each UMAP</span>
       <label class="toggle-mesh"><input type="radio" name="plot-drag-mode" value="zoom" checked /> Zoom into box (only the plot you drag)</label>
       <label class="toggle-mesh"><input type="radio" name="plot-drag-mode" value="select" /> Box select — highlight pairs (amber, same as pinned)</label>
       <label class="toggle-mesh"><input type="radio" name="plot-drag-mode" value="paint" /> Paint region — draw a freeform outline (MS Paint–style)</label>
+    </div>
+    <div class="toolbar toolbar-row pair-table-controls">
+      <span class="hdr">Pair tables</span>
+      <label for="pair-table-sort">Sort by</label>
+      <select id="pair-table-sort" aria-label="Sort mapped pair tables">
+        <option value="corr_desc" selected>Correlation (high → low)</option>
+        <option value="corr_asc">Correlation (low → high)</option>
+        <option value="aid">A feature id</option>
+        <option value="bid">B feature id</option>
+      </select>
+      <label class="toggle-mesh"><input type="checkbox" id="corr-filter-global-check" /> Global: corr ≥</label>
+      <input type="number" id="global-corr-min" step="0.01" min="-1" max="1" value="" placeholder="0.2" title="When checked, hide pairs below this B→A correlation (selection table + base for category view)" style="width:76px;padding:5px 8px;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;" />
+      <label class="toggle-mesh"><input type="checkbox" id="corr-filter-category-check" /> Category: corr ≥</label>
+      <input type="number" id="category-corr-min" step="0.01" min="-1" max="1" value="" placeholder="0.3" title="When a semantic group is selected and this is checked, category table / purple mesh / violet highlights use this extra floor (AND with global if global is checked)" style="width:76px;padding:5px 8px;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;" />
     </div>
     <div class="row">
       <div class="panel">
@@ -1831,6 +1891,7 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
     const selectionTableWrap = document.getElementById("selection-table-wrap");
     const selectionTableTitle = document.getElementById("selection-table-title");
     const selectionPairTbody = document.getElementById("selection-pair-tbody");
+    const categoryMetricsHost = document.getElementById("category-metrics");
     catSelect.appendChild(new Option("(none)", ""));
     for (const g of semanticGroups) {{
       const na = (g.feature_ids_a || []).length;
@@ -1867,6 +1928,8 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
         ["RSA Spearman (activation RDMs, selected)", fmt(m.rsa_spearman_activation_rdm)],
         ["Orthogonal Procrustes rel. RMSE (activations, selected)", fmt(m.procrustes_rel_rmse_activations)],
         ["Mean Pearson (per matched column, token axis)", fmt(m.mean_matched_column_pearson)],
+        ["SVCCA (paired decoder directions)", fmt(m.svcca_decoder_paired)],
+        ["SVCCA (paired activation trajectories)", fmt(m.svcca_activation_paired)],
       ];
       if (m.ot_primal_cost_sinkhorn != null && typeof m.ot_primal_cost_sinkhorn === "number" && Number.isFinite(m.ot_primal_cost_sinkhorn)) {{
         rows.push(["OT primal cost ⟨T, 1−C⟩ (Sinkhorn)", fmt(m.ot_primal_cost_sinkhorn)]);
@@ -1878,24 +1941,98 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
       const note = "<p style='margin:8px 0 0 0;color:#8b949e;font-size:11px;line-height:1.45;'>"
         + "CKA and RSA use the same token positions for selected model-B features and their mapped model-A columns. "
         + "Procrustes applies an orthogonal map in sample space to best align those matched activation profiles (lower relative RMSE means closer geometry). "
+        + "SVCCA on decoders runs when the number of paired features exceeds both residual widths (same convention as Lan et al.); otherwise activation SVCCA may still apply when there are many more tokens than features. "
         + "Hungarian alignment is a one-to-one maximum-total-correlation assignment over the pooled features (equal pool sizes).</p>";
       host.innerHTML = "<h4>Quantitative feature-space similarity</h4>" + tbl + note;
     }})();
 
-    function rebuildCategoryTable(groupId) {{
+    function fmtMetricCell(x) {{
+      if (x == null || typeof x !== "number" || !Number.isFinite(x)) return "—";
+      return x.toFixed(4);
+    }}
+
+    function renderCategoryMetrics(groupId) {{
+      if (!categoryMetricsHost) return;
       if (!groupId) {{
-        categoryTableWrap.style.display = "none";
-        categoryPairTbody.innerHTML = "";
-        categoryTableTitle.textContent = "";
-        updateLineSubsetShapes();
+        categoryMetricsHost.style.display = "none";
+        categoryMetricsHost.innerHTML = "";
         return;
       }}
       const g = semanticGroups.find((x) => x.id === groupId);
       if (!g) {{
-        categoryTableWrap.style.display = "none";
-        updateLineSubsetShapes();
+        categoryMetricsHost.style.display = "none";
+        categoryMetricsHost.innerHTML = "";
         return;
       }}
+      const cm = g.metrics;
+      if (!cm) {{
+        categoryMetricsHost.style.display = "block";
+        categoryMetricsHost.innerHTML = "<h4>Category metrics</h4><p style='margin:0;color:#8b949e;font-size:12px;'>No per-category metrics in this JSON (re-run <code>pythia_feature_mapping_viz.py</code>).</p>";
+        return;
+      }}
+      const n = cm.n_pairs != null ? String(cm.n_pairs) : "—";
+      const subRows = [
+        ["Paired features (mapped A↔B in this category)", n],
+        ["Linear CKA (activations)", fmtMetricCell(cm.linear_cka_activations)],
+        ["RSA Spearman (activation RDMs)", fmtMetricCell(cm.rsa_spearman_activation_rdm)],
+        ["Orthogonal Procrustes rel. RMSE (activations)", fmtMetricCell(cm.procrustes_rel_rmse_activations)],
+        ["Mean Pearson (per matched column)", fmtMetricCell(cm.mean_matched_column_pearson)],
+        ["SVCCA (paired decoder directions)", fmtMetricCell(cm.svcca_decoder_paired)],
+        ["SVCCA (paired activation trajectories)", fmtMetricCell(cm.svcca_activation_paired)],
+      ];
+      const tbl = '<table>' + subRows.map(([k, v]) =>
+        '<tr><td class="k">' + escHtml(k) + '</td><td class="v">' + escHtml(String(v)) + '</td></tr>'
+      ).join('') + '</table>';
+      categoryMetricsHost.innerHTML = "<h4>Metrics: " + escHtml(g.name) + "</h4>" + tbl
+        + "<p style='margin:8px 0 0 0;color:#8b949e;font-size:11px;line-height:1.45;'>"
+        + "Subset includes model-B features in this semantic bucket (plus model-A features in the bucket when they link to a selected mapped pair). "
+        + "SVCCA is omitted for category subsets in the pipeline build (too slow for many groups); CKA / RSA / Procrustes / Pearson still reflect this subset.</p>";
+      categoryMetricsHost.style.display = "block";
+    }}
+
+    function readNumericOrNull(el) {{
+      if (!el) return null;
+      const v = parseFloat(el.value);
+      return Number.isFinite(v) ? v : null;
+    }}
+
+    function readGlobalCorrThreshold() {{
+      const chk = document.getElementById("corr-filter-global-check");
+      if (!chk || !chk.checked) return null;
+      return readNumericOrNull(document.getElementById("global-corr-min"));
+    }}
+
+    function readCategoryCorrThreshold() {{
+      const chk = document.getElementById("corr-filter-category-check");
+      const gid = catSelect.value || "";
+      if (!chk || !chk.checked || !gid) return null;
+      return readNumericOrNull(document.getElementById("category-corr-min"));
+    }}
+
+    function pairPassesCorr(corr, globalT, categoryT) {{
+      if (!Number.isFinite(corr)) return false;
+      if (globalT != null && corr < globalT) return false;
+      if (categoryT != null && corr < categoryT) return false;
+      return true;
+    }}
+
+    function sortPairRows(rows) {{
+      const sel = document.getElementById("pair-table-sort");
+      const mode = sel && sel.value ? sel.value : "corr_desc";
+      const out = rows.slice();
+      if (mode === "corr_desc") {{
+        out.sort((a, b) => (Number(b.corr) - Number(a.corr)) || (a.aid - b.aid) || (a.bid - b.bid));
+      }} else if (mode === "corr_asc") {{
+        out.sort((a, b) => (Number(a.corr) - Number(b.corr)) || (a.aid - b.aid) || (a.bid - b.bid));
+      }} else if (mode === "bid") {{
+        out.sort((a, b) => (a.bid - b.bid) || (a.aid - b.aid));
+      }} else {{
+        out.sort((a, b) => (a.aid - b.aid) || (a.bid - b.bid));
+      }}
+      return out;
+    }}
+
+    function collectCategoryPairRows(g) {{
       const setA = new Set(g.feature_ids_a || []);
       const setB = new Set(g.feature_ids_b || []);
       const rows = [];
@@ -1920,8 +2057,40 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
         const p = aPts[idxByAId[String(mid)]];
         addRow(mid, p.label, q.feature_id, q.label, q.corr_to_mapped);
       }}
-      rows.sort((a, b) => (a.aid - b.aid) || (a.bid - b.bid));
-      categoryTableTitle.textContent = `Mapped pairs involving "${{g.name}}" (${{rows.length}} pairs)`;
+      return rows;
+    }}
+
+    function refreshPairTablesFiltersAndMesh() {{
+      rebuildCategoryTable(catSelect.value || "");
+      rebuildUnifiedPairsTable();
+      if (catSelect.value) paintCategoryHighlights();
+      else updateLineSubsetShapes();
+    }}
+
+    function rebuildCategoryTable(groupId) {{
+      if (!groupId) {{
+        categoryTableWrap.style.display = "none";
+        categoryPairTbody.innerHTML = "";
+        categoryTableTitle.textContent = "";
+        updateLineSubsetShapes();
+        return;
+      }}
+      const g = semanticGroups.find((x) => x.id === groupId);
+      if (!g) {{
+        categoryTableWrap.style.display = "none";
+        updateLineSubsetShapes();
+        return;
+      }}
+      let rows = collectCategoryPairRows(g);
+      const nTotal = rows.length;
+      const gThr = readGlobalCorrThreshold();
+      const cThr = readCategoryCorrThreshold();
+      rows = rows.filter((r) => pairPassesCorr(r.corr, gThr, cThr));
+      rows = sortPairRows(rows);
+      const filt = gThr != null || cThr != null;
+      categoryTableTitle.textContent = filt
+        ? `Mapped pairs involving "${{g.name}}" (${{rows.length}} of ${{nTotal}} after corr filters)`
+        : `Mapped pairs involving "${{g.name}}" (${{rows.length}} pairs)`;
       categoryPairTbody.innerHTML = rows
         .map(
           (r) =>
@@ -2159,6 +2328,7 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
         return;
       }}
       const rows = [];
+      const gThrOnly = readGlobalCorrThreshold();
       for (const k of keys) {{
         const parts = k.split(":");
         const aid = Number(parts[0]);
@@ -2168,11 +2338,17 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
         if (ia === undefined || ib === undefined) continue;
         const p = aPts[ia];
         const q = bPts[ib];
-        rows.push({{ aid, al: p.label, bid, bl: q.label, corr: q.corr_to_mapped }});
+        const corr = q.corr_to_mapped;
+        if (!pairPassesCorr(corr, gThrOnly, null)) continue;
+        rows.push({{ aid, al: p.label, bid, bl: q.label, corr }});
       }}
-      rows.sort((a, b) => (a.aid - b.aid) || (a.bid - b.bid));
-      selectionTableTitle.textContent = `Selected feature pairs (${{rows.length}}) — from click pins and from box/paint; click a row to pin/unpin`;
-      selectionPairTbody.innerHTML = rows
+      const sorted = sortPairRows(rows);
+      const nAll = [...keys].length;
+      const filt = gThrOnly != null;
+      selectionTableTitle.textContent = filt
+        ? `Selected feature pairs (${{sorted.length}} of ${{nAll}} after global corr filter) — pins + box/paint; click row to pin/unpin`
+        : `Selected feature pairs (${{sorted.length}}) — from click pins and from box/paint; click a row to pin/unpin`;
+      selectionPairTbody.innerHTML = sorted
         .map(
           (r) =>
             `<tr class="pair-row" data-aid="${{r.aid}}" data-bid="${{r.bid}}"><td class="num">${{r.aid}}</td><td>${{escHtml(r.al)}}</td><td class="num">${{r.bid}}</td><td>${{escHtml(r.bl)}}</td><td class="corr">${{Number.isFinite(r.corr) ? r.corr.toFixed(4) : "—"}}</td></tr>`
@@ -2310,8 +2486,12 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
       if (wantCat) {{
         const g = semanticGroups.find((x) => x.id === categoryIdLocked);
         if (g) {{
-          const fa = (g.feature_ids_a || []).filter((id) => idxByAId[String(id)] !== undefined);
-          const fb = (g.feature_ids_b || []).filter((id) => idxByBId[String(id)] !== undefined);
+          let rows = collectCategoryPairRows(g);
+          const gThr = readGlobalCorrThreshold();
+          const cThr = readCategoryCorrThreshold();
+          rows = rows.filter((r) => pairPassesCorr(r.corr, gThr, cThr));
+          const fa = [...new Set(rows.map((r) => r.aid))].sort((x, y) => x - y);
+          const fb = [...new Set(rows.map((r) => r.bid))].sort((x, y) => x - y);
           const ca = capSortedUniqueIds(fa, MAX_MESH_POINTS);
           const cb = capSortedUniqueIds(fb, MAX_MESH_POINTS);
           shapesA.push(...meshLineShapes(coordsFromIds(ca.ids, aPts, idxByAId), lineCat));
@@ -2332,6 +2512,11 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
       el.addEventListener("change", () => updateLineSubsetShapes());
     }});
 
+    [["pair-table-sort", "change"], ["global-corr-min", "input"], ["category-corr-min", "input"], ["corr-filter-global-check", "change"], ["corr-filter-category-check", "change"]].forEach(([id, ev]) => {{
+      const el = document.getElementById(id);
+      if (el) el.addEventListener(ev, () => refreshPairTablesFiltersAndMesh());
+    }});
+
     function clearHoverHighlightsOnly() {{
       Plotly.restyle(plotA, {{ x: [[]], y: [[]] }}, [HOVER_TRACE]);
       Plotly.restyle(plotB, {{ x: [[]], y: [[]] }}, [HOVER_TRACE]);
@@ -2340,11 +2525,17 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
     function paintCategoryHighlights() {{
       const g = semanticGroups.find((x) => x.id === categoryIdLocked);
       if (!g) return;
-      const [xa, ya] = idsToCoords(g.feature_ids_a || [], aPts, idxByAId);
-      const [xb, yb] = idsToCoords(g.feature_ids_b || [], bPts, idxByBId);
+      let rows = collectCategoryPairRows(g);
+      const gThr = readGlobalCorrThreshold();
+      const cThr = readCategoryCorrThreshold();
+      rows = rows.filter((r) => pairPassesCorr(r.corr, gThr, cThr));
+      const idA = [...new Set(rows.map((r) => r.aid))];
+      const idB = [...new Set(rows.map((r) => r.bid))];
+      const [xa, ya] = idsToCoords(idA, aPts, idxByAId);
+      const [xb, yb] = idsToCoords(idB, bPts, idxByBId);
       Plotly.restyle(plotA, {{ x: [xa], y: [ya] }}, [CATEGORY_TRACE]);
       Plotly.restyle(plotB, {{ x: [xb], y: [yb] }}, [CATEGORY_TRACE]);
-      detailA.textContent = `${{g.name}}: ${{xa.length}} on A, ${{xb.length}} on B (violet). Orange = hover. Amber = click‑pinned pairs.`;
+      detailA.textContent = `${{g.name}}: ${{xa.length}} on A, ${{xb.length}} on B (violet, after corr filters). Orange = hover. Amber = click‑pinned pairs.`;
       detailB.textContent = "Table: click a row to pin/unpin that pair on the maps.";
       updateLineSubsetShapes();
     }}
@@ -2375,13 +2566,11 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
         clearCategoryAndHover();
         detailA.textContent = "Hover a feature point. Click a mapped pair on a plot to pin (amber); click again to unpin.";
         detailB.textContent = "Use Reset all selected features to clear amber pins.";
-        rebuildCategoryTable("");
-        updateLineSubsetShapes();
+        renderCategoryMetrics("");
       }} else {{
-        paintCategoryHighlights();
-        rebuildCategoryTable(categoryIdLocked);
-        updateLineSubsetShapes();
+        renderCategoryMetrics(categoryIdLocked);
       }}
+      refreshPairTablesFiltersAndMesh();
     }});
 
     function renderDetails(aPoint, bPoint) {{
@@ -2771,6 +2960,7 @@ def _render_html(payload: Dict, output_html: Path, title: str) -> None:
     }});
 
     updateLineSubsetShapes();
+    renderCategoryMetrics("");
     rebuildUnifiedPairsTable();
   </script>
 </body>
@@ -2859,6 +3049,8 @@ def build_data(args) -> Dict:
         args.mapping_method,
         args.ot_reg,
         ot_plan,
+        weights_a,
+        weights_b,
     )
 
     emb_a = _compute_umap(weights_a[selected_a], seed=args.seed)
@@ -2896,6 +3088,19 @@ def build_data(args) -> Dict:
         semantic_categories=_load_semantic_categories(args.semantic_categories_json),
         metrics=metrics,
     )
+    for g in payload["semantic_groups"]:
+        fa_arr, fb_arr = _pair_arrays_for_semantic_group(
+            g, b_to_a_map, a_to_b_map, selected_b, selected_a
+        )
+        g["metrics"] = compute_subset_metrics(
+            acts_a_2d,
+            acts_b_2d,
+            weights_a,
+            weights_b,
+            fa_arr,
+            fb_arr,
+            include_svcca=False,
+        )
     return payload
 
 
@@ -2978,11 +3183,16 @@ def main():
     if args.from_json:
         payload = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
         cats = _load_semantic_categories(args.semantic_categories_json)
+        prev_by_id = {str(g.get("id")): g for g in (payload.get("semantic_groups") or [])}
         payload["semantic_groups"] = _semantic_groups_for_points(
             payload["model_a"]["points"],
             payload["model_b"]["points"],
             cats,
         )
+        for g in payload["semantic_groups"]:
+            prev = prev_by_id.get(str(g.get("id")))
+            if prev and isinstance(prev.get("metrics"), dict):
+                g["metrics"] = prev["metrics"]
     else:
         payload = build_data(args)
         output_json.parent.mkdir(parents=True, exist_ok=True)

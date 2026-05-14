@@ -23,7 +23,7 @@ The script `run_pipeline/pythia_feature_mapping_viz.py` builds a **single self-c
 Full flags, JSON re-render (`--from-json`), semantic category JSON, and troubleshooting: [`run_pipeline/README_pythia_feature_mapping_viz.md`](run_pipeline/README_pythia_feature_mapping_viz.md).
 
 <p align="center">
-  <img src="docs/images/pythia_sae_feature_map_ui_example.png" alt="Linked dual-UMAP UI for two Pythia SAE feature sets." width="780">
+  <img src="docs/images/pythia_sae_feature_map_ui_example_hungarian.png" alt="Linked dual-UMAP UI for two Pythia SAE feature sets." width="780">
 </p>
 
 Quick variant with fewer points:

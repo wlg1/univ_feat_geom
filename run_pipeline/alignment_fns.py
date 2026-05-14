@@ -8,7 +8,7 @@ and activation-space orthogonal Procrustes disparity on matched features.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import scipy.spatial.distance
@@ -27,6 +27,115 @@ try:
     import ot
 except ImportError:  # pragma: no cover
     ot = None  # type: ignore
+
+try:
+    from run_pipeline.sim_fns import svcca as _svcca_fn
+except ImportError:  # pragma: no cover
+    from sim_fns import svcca as _svcca_fn
+
+
+def _safe_svcca_decoder(Wa: np.ndarray, Wb: np.ndarray) -> Optional[float]:
+    """
+    SVCCA on paired decoder rows (n, d_a) vs (n, d_b).
+    sim_fns.svcca / get_cca_similarity require n > max(d_a, d_b) so the transposed
+    layout satisfies num_neurons < num_datapoints.
+    """
+    if Wa.ndim != 2 or Wb.ndim != 2 or Wa.shape[0] != Wb.shape[0]:
+        return None
+    n, da = Wa.shape
+    db = Wb.shape[1]
+    if n <= max(da, db):
+        return None
+    try:
+        return float(_svcca_fn(Wa.astype(np.float64), Wb.astype(np.float64), "nd"))
+    except Exception:
+        return None
+
+
+def _safe_svcca_activation(xa: np.ndarray, xb: np.ndarray) -> Optional[float]:
+    """xa, xb (S, n); SVCCA when num_datapoints S > num_neurons n (paired features)."""
+    if xa.shape != xb.shape or xa.ndim != 2:
+        return None
+    s, n = xa.shape
+    if n < 2 or s <= n:
+        return None
+    try:
+        return float(_svcca_fn(xa.astype(np.float64), xb.astype(np.float64), "nd"))
+    except Exception:
+        return None
+
+
+def compute_subset_metrics(
+    acts_a_2d: torch.Tensor,
+    acts_b_2d: torch.Tensor,
+    weights_a: np.ndarray,
+    weights_b: np.ndarray,
+    fa_list: np.ndarray,
+    fb_list: np.ndarray,
+    *,
+    include_svcca: bool = True,
+    max_n_activation_svcca: int = 384,
+) -> Dict[str, Any]:
+    """
+    CKA / RSA / Procrustes / optional SVCCA on parallel (fa, fb) pairs.
+    Per-semantic-group calls should pass include_svcca=False (SVCCA is very slow at scale).
+    JSON-serializable; uses null for undefined scores (too few features, etc.).
+    """
+    n = int(len(fb_list))
+    empty: Dict[str, Any] = {
+        "n_pairs": n,
+        "linear_cka_activations": None,
+        "rsa_spearman_activation_rdm": None,
+        "procrustes_rel_rmse_activations": None,
+        "mean_matched_column_pearson": None,
+        "svcca_decoder_paired": None,
+        "svcca_activation_paired": None,
+    }
+    if n == 0 or len(fa_list) != n:
+        return empty
+
+    fa_t = torch.as_tensor(fa_list, device=acts_a_2d.device, dtype=torch.long)
+    fb_t = torch.as_tensor(fb_list, device=acts_b_2d.device, dtype=torch.long)
+    xa = acts_a_2d[:, fa_t].float().cpu().numpy()
+    xb = acts_b_2d[:, fb_t].float().cpu().numpy()
+    wa = weights_a[np.asarray(fa_list, dtype=np.int64)]
+    wb = weights_b[np.asarray(fb_list, dtype=np.int64)]
+
+    if n >= 2:
+        try:
+            empty["linear_cka_activations"] = float(linear_cka(xa, xb))
+        except Exception:
+            pass
+    if n >= 4:
+        try:
+            rsa = rsa_spearman_cosine_rows(xa.T, xb.T)
+            if rsa == rsa:  # not NaN
+                empty["rsa_spearman_activation_rdm"] = float(rsa)
+        except Exception:
+            pass
+    if n >= 1 and xa.shape[0] >= 2:
+        try:
+            empty["procrustes_rel_rmse_activations"] = float(procrustes_relative_rmse(xa, xb))
+        except Exception:
+            pass
+        try:
+            per_pair = np.array(
+                [float(np.corrcoef(xa[:, i], xb[:, i])[0, 1]) for i in range(n)],
+                dtype=np.float64,
+            )
+            empty["mean_matched_column_pearson"] = float(np.nanmean(per_pair))
+        except Exception:
+            pass
+
+    dec = _safe_svcca_decoder(wa, wb) if include_svcca else None
+    if dec is not None:
+        empty["svcca_decoder_paired"] = dec
+    if include_svcca and n <= max_n_activation_svcca:
+        act_sv = _safe_svcca_activation(xa, xb)
+        if act_sv is not None:
+            empty["svcca_activation_paired"] = act_sv
+
+    return empty
 
 
 def build_activation_corr_matrix(
@@ -179,20 +288,22 @@ def compute_alignment_and_metrics(
     mapping_method: str,
     ot_reg: float,
     ot_plan: Optional[np.ndarray],
+    weights_a: np.ndarray,
+    weights_b: np.ndarray,
 ) -> Dict[str, Any]:
     """Similarity metrics on selected B features and their mapped A features."""
     sb = np.sort(selected_b.astype(np.int64))
     mapped_a = np.array([b_to_a[int(fb)] for fb in sb], dtype=np.int64)
 
-    xa = acts_a_2d[:, torch.as_tensor(mapped_a, device=acts_a_2d.device)].float().cpu().numpy()
-    xb = acts_b_2d[:, torch.as_tensor(sb, device=acts_b_2d.device)].float().cpu().numpy()
-
-    cka = linear_cka(xa, xb)
-    rsa = rsa_spearman_cosine_rows(xa.T, xb.T)
-    pr_rel = procrustes_relative_rmse(xa, xb)
-
-    per_pair = np.array([float(np.corrcoef(xa[:, i], xb[:, i])[0, 1]) for i in range(xa.shape[1])])
-    mean_matched_pearson = float(np.nanmean(per_pair))
+    subset = compute_subset_metrics(
+        acts_a_2d,
+        acts_b_2d,
+        weights_a,
+        weights_b,
+        mapped_a,
+        sb,
+        include_svcca=True,
+    )
 
     inv_a = {int(pool_a[i]): i for i in range(len(pool_a))}
     j_idx = np.arange(len(pool_b))
@@ -203,13 +314,10 @@ def compute_alignment_and_metrics(
         "mapping_method": mapping_method,
         "n_pool_features": int(C.shape[0]),
         "n_selected_b": int(len(sb)),
-        "linear_cka_activations": float(cka),
-        "rsa_spearman_activation_rdm": float(rsa),
-        "procrustes_rel_rmse_activations": float(pr_rel),
-        "mean_matched_column_pearson": mean_matched_pearson,
         "mean_abs_pool_corr_at_map": float(np.mean(np.abs(pool_corrs))),
         "mean_pool_corr_at_map": float(np.mean(pool_corrs)),
     }
+    out.update(subset)
 
     if ot_plan is not None:
         out["ot_primal_cost_sinkhorn"] = float(np.sum(ot_plan * (1.0 - C)))
